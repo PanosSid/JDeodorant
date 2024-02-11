@@ -8,6 +8,7 @@ import gr.uom.java.ast.util.StatementExtractor;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -56,6 +57,7 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	private ArrayList<Statement> defaultCaseStatements;
 	private Map<Expression, List<SimpleName>> staticFieldMap;
 	private Map<Expression, List<Type>> subclassTypeMap;
+	private Map<VariableDeclarationFragment, Set<Expression>> assignedFieldsToValuesMap;
 	private VariableDeclarationFragment typeField;
 	private MethodDeclaration typeFieldGetterMethod;
 	private MethodDeclaration typeFieldSetterMethod;
@@ -123,6 +125,7 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 		this.staticFieldSubclassTypeMap = new LinkedHashMap<SimpleName, String>();
 		this.remainingIfStatementExpressionMap = new LinkedHashMap<Expression, DefaultMutableTreeNode>();
 		this.abstractMethodName = null;
+		this.assignedFieldsToValuesMap = new LinkedHashMap<VariableDeclarationFragment, Set<Expression>>();
 	}
 	
 	public void addTypeCheck(Expression expression, Statement statement) {
@@ -158,6 +161,17 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	
 	public void addSubclassType(Expression expression, List<Type> subclassTypeGroup) {
 		subclassTypeMap.put(expression, subclassTypeGroup);
+	}
+	
+	public Map<VariableDeclarationFragment, Set<Expression>> getAssignedFieldsToValuesMap() {
+		return assignedFieldsToValuesMap;
+	}
+
+	public void addAssignedFieldsAndValues(VariableDeclarationFragment field, Expression value) {
+		if (!assignedFieldsToValuesMap.containsKey(field)) {
+			assignedFieldsToValuesMap.put(field, new HashSet<Expression>());
+		}
+		assignedFieldsToValuesMap.get(field).add(value);
 	}
 	
 	public void addRemainingIfStatementExpression(Expression expression, DefaultMutableTreeNode root) {
@@ -1406,5 +1420,26 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 			return 1;
 		
 		return refactoringName1.compareTo(refactoringName2);
+	}
+	
+	public boolean isTypeFieldAssignedStateValues() {
+		if (!assignedFieldsToValuesMap.containsKey(typeField)) {
+			return false;
+		}
+		List<SimpleName> states = getStaticFields();
+		Set<String> statesNames = new HashSet<String>();
+		for (SimpleName st : states) 
+			statesNames.add(st.getIdentifier());
+		
+		for (Expression assignedExpression : assignedFieldsToValuesMap.get(typeField)) {
+			if (!(assignedExpression instanceof SimpleName)) {	// temp
+				return false;
+			}
+			SimpleName assignedName = (SimpleName) assignedExpression;
+			if (!statesNames.contains(assignedName.getIdentifier())) {
+				return false;
+			}
+		}
+		return true;
 	}
 }

@@ -630,6 +630,7 @@ public class TypeCheckCodeFragmentAnalyzer {
 													if(leftHandSideName != null && leftHandSideName.equals(simpleName)) {
 														isAssigned = true;
 														typeCheckElimination.addAssignedField(fragment);
+														typeCheckElimination.addAssignedFieldsAndValues(fragment, assignment.getRightHandSide());
 														if(!assignment.getOperator().equals(Assignment.Operator.ASSIGN))
 															typeCheckElimination.addAccessedField(fragment);
 													}
@@ -906,6 +907,7 @@ public class TypeCheckCodeFragmentAnalyzer {
 														if(leftHandSideName != null && leftHandSideName.equals(simpleName)) {
 															isAssigned = true;
 															typeCheckElimination.addAssignedField(fragment);
+															typeCheckElimination.addAssignedFieldsAndValues(fragment, assignment.getRightHandSide());
 															if(!assignment.getOperator().equals(Assignment.Operator.ASSIGN))
 																typeCheckElimination.addAccessedField(fragment);
 														}

@@ -594,8 +594,12 @@ public class TypeChecking extends ViewPart {
 						if (typeCheckElimination.getTypeFieldConsturctorMethod() != null && typeCheckElimination.getTypeFieldSetterMethod() == null) {
 							System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Subclass ***"); 
 						} else if (typeCheckElimination.getTypeFieldSetterMethod() != null) {
-							System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Strategy/State ***");
-							System.out.println(typeCheckElimination);
+//							System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Strategy/State ***");
+							if (typeCheckElimination.isTypeFieldAssignedStateValues()) {
+								System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with State ***");
+							} else {
+								System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Strategy ***");
+							}
 						}
 						refactoring = new ReplaceTypeCodeWithStateStrategy(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);
 					}
