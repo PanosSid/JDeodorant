@@ -140,6 +140,9 @@ public class MethodDeclarationUtility {
 	}
 
 	public static SimpleName isSetter(MethodDeclaration methodDeclaration) {
+		if (isConstructor(methodDeclaration) != null) {
+			return null;
+		}
 		Block methodBody = methodDeclaration.getBody();
 		List<SingleVariableDeclaration> parameters = methodDeclaration.parameters();
 		if(methodBody != null) {
@@ -171,7 +174,11 @@ public class MethodDeclarationUtility {
 		}
 		return null;
 	}
-
+	
+	public static SimpleName isConstructor(MethodDeclaration methodDeclaration) {
+		return methodDeclaration.isConstructor() ? methodDeclaration.getName() : null;
+	}
+	
 	public static AbstractVariable createVariable(SimpleName simpleName, AbstractVariable rightPart) {
 		IBinding binding = simpleName.resolveBinding();
 		if(binding != null && binding.getKind() == IBinding.VARIABLE) {

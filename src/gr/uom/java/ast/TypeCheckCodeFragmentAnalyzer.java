@@ -97,6 +97,9 @@ public class TypeCheckCodeFragmentAnalyzer {
 											if(fieldInstruction != null && fragment.getName().getIdentifier().equals(fieldInstruction.getIdentifier())) {
 												typeCheckElimination.setTypeFieldGetterMethod(method);
 											}
+											if(MethodDeclarationUtility.isConstructor(method) != null) {
+												typeCheckElimination.setTypeFieldConsturctorMethod(method);
+											}
 										}
 										break;
 									}
@@ -427,6 +430,9 @@ public class TypeCheckCodeFragmentAnalyzer {
 										fieldInstruction = MethodDeclarationUtility.isGetter(method);
 										if(fieldInstruction != null && fragment.getName().getIdentifier().equals(fieldInstruction.getIdentifier())) {
 											typeCheckElimination.setTypeFieldGetterMethod(method);
+										}
+										if(MethodDeclarationUtility.isConstructor(method) != null) {
+											typeCheckElimination.setTypeFieldConsturctorMethod(method);
 										}
 									}
 									break;

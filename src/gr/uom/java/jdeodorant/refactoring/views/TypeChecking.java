@@ -591,6 +591,12 @@ public class TypeChecking extends ViewPart {
 					}
 					Refactoring refactoring = null;
 					if(typeCheckElimination.getExistingInheritanceTree() == null) {
+						if (typeCheckElimination.getTypeFieldConsturctorMethod() != null && typeCheckElimination.getTypeFieldSetterMethod() == null) {
+							System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Subclass ***"); 
+						} else if (typeCheckElimination.getTypeFieldSetterMethod() != null) {
+							System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Strategy/State ***");
+							System.out.println(typeCheckElimination);
+						}
 						refactoring = new ReplaceTypeCodeWithStateStrategy(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);
 					}
 					else {
@@ -748,6 +754,8 @@ public class TypeChecking extends ViewPart {
 						typeCheckEliminationGroups.addAll(systemObject.generateTypeCheckEliminations(filteredClassObjectsToBeExamined, monitor));
 					}
 				});
+				
+				
 
 				table = new TypeCheckEliminationGroup[typeCheckEliminationGroups.size()];
 				int i = 0;

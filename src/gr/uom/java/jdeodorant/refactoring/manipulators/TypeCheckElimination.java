@@ -59,6 +59,7 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	private VariableDeclarationFragment typeField;
 	private MethodDeclaration typeFieldGetterMethod;
 	private MethodDeclaration typeFieldSetterMethod;
+	private MethodDeclaration typeFieldConstructorMethod;
 	private Statement typeCheckCodeFragment;
 	private CompositeStatementObject typeCheckCompositeStatement;
 	private MethodDeclaration typeCheckMethod;
@@ -333,6 +334,14 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 
 	public void setTypeFieldSetterMethod(MethodDeclaration typeFieldSetterMethod) {
 		this.typeFieldSetterMethod = typeFieldSetterMethod;
+	}
+	
+	public void setTypeFieldConsturctorMethod(MethodDeclaration typeFieldConstructorMethod) {
+		this.typeFieldConstructorMethod = typeFieldConstructorMethod;
+	}
+	
+	public MethodDeclaration getTypeFieldConsturctorMethod() {
+		return typeFieldConstructorMethod;
 	}
 
 	public Statement getTypeCheckCodeFragment() {
