@@ -83,7 +83,10 @@ public class MethodBodyObject {
 			for(Statement statement2 : statements) {
 				if(statement2 instanceof SwitchCase) {
 					SwitchCase switchCase = (SwitchCase)statement2;
-					switchCaseExpression = switchCase.getExpression();
+					List<Expression> expressions = switchCase.expressions();
+					if (expressions != null && !expressions.isEmpty()) {
+						switchCaseExpression = expressions.get(0);
+					}
 					isDefaultCase = switchCase.isDefault();
 					if(!isDefaultCase)
 						switchCaseExpressions.add(switchCaseExpression);
