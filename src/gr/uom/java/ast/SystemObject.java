@@ -509,6 +509,9 @@ public class SystemObject {
     				}
     			}
     		}
+    		if (eliminations.size() == 0) {
+    			System.out.println("Did not found any Typecode code smells");
+    		}
     		if(monitor != null)
     			monitor.worked(1);
     	}

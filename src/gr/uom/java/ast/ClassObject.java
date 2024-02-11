@@ -1,17 +1,33 @@
 package gr.uom.java.ast;
 
-import gr.uom.java.ast.decomposition.MethodBodyObject;
-import gr.uom.java.jdeodorant.refactoring.manipulators.TypeCheckElimination;
-
-import java.util.List;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.jdt.core.ITypeRoot;
+import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
+import org.eclipse.jdt.core.dom.Assignment;
+import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.EnumDeclaration;
+import org.eclipse.jdt.core.dom.Expression;
+import org.eclipse.jdt.core.dom.ExpressionStatement;
+import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.IVariableBinding;
+import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
+import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
+
+import gr.uom.java.ast.decomposition.MethodBodyObject;
+import gr.uom.java.ast.util.InstanceOfSimpleName;
+import gr.uom.java.jdeodorant.refactoring.manipulators.TypeCheckElimination;
 
 public class ClassObject extends ClassDeclarationObject {
 
@@ -166,9 +182,99 @@ public class ClassObject extends ClassDeclarationObject {
     			}
     		}
     	}
+    	if (typeCheckEliminations.isEmpty()) {
+    		System.out.println("Searching for Replace Typecode With Class opportunities...");
+    		Map<TypeObject, List<FieldObject>> typeToNonStaticFieldsMap = new HashMap<TypeObject, List<FieldObject>>();
+    		Map<TypeObject, List<FieldObject>> typeToStaticFieldsMap = new HashMap<TypeObject, List<FieldObject>>();
+    		Set<FieldObject> constantFields = findConstantFields();
+    		for (FieldObject fieldObj : fieldList) {
+//    			if (fieldObj.isStatic()) {
+    			if (constantFields.contains(fieldObj) ) {
+    				if (!typeToStaticFieldsMap.containsKey(fieldObj.getType())) {
+    					typeToStaticFieldsMap.put(fieldObj.getType(), new ArrayList<FieldObject>());
+    				}
+    				typeToStaticFieldsMap.get(fieldObj.getType()).add(fieldObj);
+    			} else {
+    				if (!typeToNonStaticFieldsMap.containsKey(fieldObj.getType())) {
+    					typeToNonStaticFieldsMap.put(fieldObj.getType(), new ArrayList<FieldObject>());
+    				}
+    				typeToNonStaticFieldsMap.get(fieldObj.getType()).add(fieldObj);
+    			}    			
+    		}
+    		for (TypeObject typeObj: typeToNonStaticFieldsMap.keySet()) {
+    			if (typeToStaticFieldsMap.containsKey(typeObj)) {
+    				System.out.println("Found Opportunity for Replace Typecode with Class: { " + typeObj.getClassType() + " => " + typeToStaticFieldsMap.get(typeObj) + "}");
+    			}
+    		}
+    	}
     	return typeCheckEliminations;
     }
-
+    
+    // + enums
+    private Set<FieldObject> findConstantFields() {
+    	Set<String> fieldsThatAreAssigned = new HashSet<String>();
+    	for (MethodObject method : methodList) {
+//    		method.getDefinedFieldsThroughFields();
+//    		method.getNonDistinctDefinedFieldsThroughFields();
+//    		method.getUsedFieldsThroughFields();
+//    		method.getInvokedMethodsThroughFields();
+    		fieldsThatAreAssigned.addAll(analyzeMethod(method.getMethodDeclaration()));
+    	}
+    	
+    	
+    	// constants of class
+    	Set<FieldObject> constants = new HashSet<FieldObject>();
+    	for (FieldObject fieldObj : fieldList) {
+			VariableDeclarationFragment vfr = fieldObj.getVariableDeclarationFragment();
+			ASTNode parent = vfr.getParent();
+	        if (parent instanceof FieldDeclaration) {
+	        	FieldDeclaration fd = (FieldDeclaration) parent;
+	        	int modifiers = fd.getModifiers();
+	        	if (Modifier.isFinal(modifiers)) {
+	        		constants.add(fieldObj);
+	        		continue;
+	        	}
+        		        			
+	        	if (!fieldsThatAreAssigned.contains(fieldObj.getName())) {
+	        		constants.add(fieldObj);
+	        	}
+	        }
+    	}
+    	
+    	// public static fields that are used in the methods of the class 
+    	// .....
+    	
+		return constants;
+    	
+    }
+    
+    public static List<String> analyzeMethod(MethodDeclaration method) {
+        List<String> fieldsThatAreAssigned = new ArrayList<String>();
+    	Block body = method.getBody();
+        if (body != null) {
+            for (Object statement : body.statements()) {
+                if (statement instanceof ExpressionStatement) {
+                    Expression expression = ((ExpressionStatement) statement).getExpression();
+                    if (expression instanceof Assignment) {
+                        Assignment assignment = (Assignment) expression;
+                        Expression leftHandSide = assignment.getLeftHandSide();
+                        if (leftHandSide instanceof SimpleName) {
+                            SimpleName name = (SimpleName) leftHandSide;
+                            if (name.resolveBinding() instanceof IVariableBinding) {
+                                IVariableBinding variableBinding = (IVariableBinding) name.resolveBinding();
+                                if (variableBinding.isField()) {
+                                    System.out.println("Assignment to field: " + variableBinding.getName() + " in method: " + method.getName());
+                                    fieldsThatAreAssigned.add(variableBinding.getName());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return fieldsThatAreAssigned;
+    }
+    
     public void setAccess(Access access) {
         this.access = access;
     }
