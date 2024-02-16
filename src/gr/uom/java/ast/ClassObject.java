@@ -184,26 +184,32 @@ public class ClassObject extends ClassDeclarationObject {
     	}
     	if (typeCheckEliminations.isEmpty()) {
     		System.out.println("Searching for Replace Typecode With Class opportunities...");
-    		Map<TypeObject, List<FieldObject>> typeToNonStaticFieldsMap = new HashMap<TypeObject, List<FieldObject>>();
-    		Map<TypeObject, List<FieldObject>> typeToStaticFieldsMap = new HashMap<TypeObject, List<FieldObject>>();
+    		Map<TypeObject, List<FieldObject>> typeToVariableFieldsMap = new HashMap<TypeObject, List<FieldObject>>();
+    		Map<TypeObject, List<FieldObject>> typeToConstantsFieldsMap = new HashMap<TypeObject, List<FieldObject>>();
     		Set<FieldObject> constantFields = findConstantFields();
     		for (FieldObject fieldObj : fieldList) {
-//    			if (fieldObj.isStatic()) {
     			if (constantFields.contains(fieldObj) ) {
-    				if (!typeToStaticFieldsMap.containsKey(fieldObj.getType())) {
-    					typeToStaticFieldsMap.put(fieldObj.getType(), new ArrayList<FieldObject>());
+    				if (!typeToConstantsFieldsMap.containsKey(fieldObj.getType())) {
+    					typeToConstantsFieldsMap.put(fieldObj.getType(), new ArrayList<FieldObject>());
     				}
-    				typeToStaticFieldsMap.get(fieldObj.getType()).add(fieldObj);
+    				typeToConstantsFieldsMap.get(fieldObj.getType()).add(fieldObj);
     			} else {
-    				if (!typeToNonStaticFieldsMap.containsKey(fieldObj.getType())) {
-    					typeToNonStaticFieldsMap.put(fieldObj.getType(), new ArrayList<FieldObject>());
+    				if (!typeToVariableFieldsMap.containsKey(fieldObj.getType())) {
+    					typeToVariableFieldsMap.put(fieldObj.getType(), new ArrayList<FieldObject>());
     				}
-    				typeToNonStaticFieldsMap.get(fieldObj.getType()).add(fieldObj);
+    				typeToVariableFieldsMap.get(fieldObj.getType()).add(fieldObj);
     			}    			
     		}
-    		for (TypeObject typeObj: typeToNonStaticFieldsMap.keySet()) {
-    			if (typeToStaticFieldsMap.containsKey(typeObj)) {
-    				System.out.println("Found Opportunity for Replace Typecode with Class: { " + typeObj.getClassType() + " => " + typeToStaticFieldsMap.get(typeObj) + "}");
+    		for (TypeObject typeObj: typeToVariableFieldsMap.keySet()) {
+    			if (typeToConstantsFieldsMap.containsKey(typeObj)) {
+    				System.out.println("Found Opportunity for Replace Typecode with Class: { " + typeObj.getClassType() + " => " + typeToConstantsFieldsMap.get(typeObj) + "}");
+    				for (FieldObject fieldObj : typeToVariableFieldsMap.get(typeObj)) {
+    					TypeCheckElimination tce = new TypeCheckElimination();
+    					System.out.println("\t { " + fieldObj.getName() + " => " + typeToConstantsFieldsMap.get(typeObj) + "}");
+    					VariableDeclarationFragment vfr = fieldObj.getVariableDeclarationFragment();
+    					tce.setTypeField(vfr);
+    					typeCheckEliminations.add(tce);    					
+    				}
     			}
     		}
     	}
