@@ -1432,14 +1432,33 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 			statesNames.add(st.getIdentifier());
 		
 		for (Expression assignedExpression : assignedFieldsToValuesMap.get(typeField)) {
-			if (!(assignedExpression instanceof SimpleName)) {	// temp
-				return false;
-			}
-			SimpleName assignedName = (SimpleName) assignedExpression;
-			if (!statesNames.contains(assignedName.getIdentifier())) {
-				return false;
+			if (assignedExpression instanceof SimpleName) {	// temp
+				SimpleName assignedName = (SimpleName) assignedExpression;
+				if (!statesNames.contains(assignedName.getIdentifier())) {
+					return false;
+				}
+			} else if (assignedExpression instanceof QualifiedName) {
+				QualifiedName assignedName = (QualifiedName) assignedExpression;
+				if (!statesNames.contains(assignedName.getName().getIdentifier())) {
+					return false;
+				}
 			}
 		}
 		return true;
+	}
+	
+	public String getApplicableRefactoringName() {
+		if (getExistingInheritanceTree() != null) {
+			return "Replace Conditional with Polymorphism";
+		} else if (!assignedFields.contains(typeField) && getTypeFieldSetterMethod() == null &&
+				(getTypeFieldConsturctorMethod() != null && typeField.getInitializer() == null) || (getTypeFieldConsturctorMethod() == null && typeField.getInitializer() != null) ) {
+			return "Replace Typecode with Subclass";
+//		} else if (isTypeFieldAssignedStateValues()) {
+//			return "Replace Typecode with State";
+//		} else if (getTypeFieldSetterMethod() != null) {
+//			return "Replace Typecode with Strategy";
+		} else {
+			return "Replace Typecode with State/Strategy";
+		}
 	}
 }

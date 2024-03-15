@@ -10,6 +10,7 @@ import gr.uom.java.jdeodorant.preferences.PreferenceConstants;
 import gr.uom.java.jdeodorant.refactoring.Activator;
 import gr.uom.java.jdeodorant.refactoring.manipulators.ReplaceConditionalWithPolymorphism;
 import gr.uom.java.jdeodorant.refactoring.manipulators.ReplaceTypeCodeWithStateStrategy;
+import gr.uom.java.jdeodorant.refactoring.manipulators.ReplaceTypeCodeWithSubclass;
 import gr.uom.java.jdeodorant.refactoring.manipulators.TypeCheckElimination;
 import gr.uom.java.jdeodorant.refactoring.manipulators.TypeCheckEliminationGroup;
 
@@ -158,10 +159,7 @@ public class TypeChecking extends ViewPart {
 				TypeCheckElimination typeCheckElimination = (TypeCheckElimination)obj;
 				switch(index) {
 				case 0:
-					if(typeCheckElimination.getExistingInheritanceTree() == null)
-						return "Replace Type Code with State/Strategy";
-					else
-						return "Replace Conditional with Polymorphism";
+					return typeCheckElimination.getApplicableRefactoringName();
 				case 1:
 					return typeCheckElimination.toString();
 				case 2:
@@ -590,21 +588,15 @@ public class TypeChecking extends ViewPart {
 						}
 					}
 					Refactoring refactoring = null;
-					if(typeCheckElimination.getExistingInheritanceTree() == null) {
-						if (typeCheckElimination.getTypeFieldConsturctorMethod() != null && typeCheckElimination.getTypeFieldSetterMethod() == null) {
-							System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Subclass ***"); 
-						} else if (typeCheckElimination.getTypeFieldSetterMethod() != null) {
-//							System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Strategy/State ***");
-							if (typeCheckElimination.isTypeFieldAssignedStateValues()) {
-								System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with State ***");
-							} else {
-								System.out.println(sourceTypeDeclaration.getName() + " ==> *** Replace Typecode with Strategy ***");
-							}
-						}
-						refactoring = new ReplaceTypeCodeWithStateStrategy(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);
-					}
-					else {
+					String refactoringName = typeCheckElimination.getApplicableRefactoringName();
+					if (refactoringName.equals("Replace Conditional with Polymorphism")){
 						refactoring = new ReplaceConditionalWithPolymorphism(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);
+					} else if (refactoringName.equals("Replace Typecode with State/Strategy") || refactoringName.equals("Replace Typecode with Strategy")  || refactoringName.equals("Replace Typecode with State")) {
+						refactoring = new ReplaceTypeCodeWithStateStrategy(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);						
+					} else if (refactoringName.equals("Replace Typecode with Subclass")) { 
+						// temp
+						refactoring = new ReplaceTypeCodeWithSubclass(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);
+//						refactoring = null;
 					}
 					try {
 						IJavaElement sourceJavaElement = JavaCore.create(sourceFile);

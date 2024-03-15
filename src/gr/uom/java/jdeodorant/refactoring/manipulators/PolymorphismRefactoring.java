@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringTokenizer;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -1128,5 +1129,16 @@ public abstract class PolymorphismRefactoring extends Refactoring {
 			returnedExpression = ast.newNullLiteral();
 		}
 		return returnedExpression;
+	}
+
+	protected String generateSubclassName(SimpleName variable) {
+		String subclassName = "";
+		StringTokenizer tokenizer = new StringTokenizer(variable.getIdentifier(),"_");
+		while(tokenizer.hasMoreTokens()) {
+			String tempName = tokenizer.nextToken().toLowerCase().toString();
+			subclassName += tempName.subSequence(0, 1).toString().toUpperCase() + 
+			tempName.subSequence(1, tempName.length()).toString();
+		}
+		return subclassName;
 	}
 }

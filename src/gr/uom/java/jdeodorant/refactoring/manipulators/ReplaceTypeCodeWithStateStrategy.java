@@ -14,7 +14,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.StringTokenizer;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -3080,17 +3079,6 @@ public class ReplaceTypeCodeWithStateStrategy extends PolymorphismRefactoring {
 				return true;
 		}
 		return false;
-	}
-
-	private String generateSubclassName(SimpleName variable) {
-		String subclassName = "";
-		StringTokenizer tokenizer = new StringTokenizer(variable.getIdentifier(),"_");
-		while(tokenizer.hasMoreTokens()) {
-			String tempName = tokenizer.nextToken().toLowerCase().toString();
-			subclassName += tempName.subSequence(0, 1).toString().toUpperCase() + 
-			tempName.subSequence(1, tempName.length()).toString();
-		}
-		return subclassName;
 	}
 
 	private String commonSubstring(List<String> subclassNames) {
