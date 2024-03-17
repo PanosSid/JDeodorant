@@ -1,13 +1,8 @@
 package gr.uom.java.jdeodorant.refactoring.manipulators;
 
-import gr.uom.java.ast.decomposition.CompositeStatementObject;
-import gr.uom.java.ast.inheritance.InheritanceTree;
-import gr.uom.java.ast.util.ExpressionExtractor;
-import gr.uom.java.ast.util.MethodDeclarationUtility;
-import gr.uom.java.ast.util.StatementExtractor;
-
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -52,6 +47,12 @@ import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
+import gr.uom.java.ast.decomposition.CompositeStatementObject;
+import gr.uom.java.ast.inheritance.InheritanceTree;
+import gr.uom.java.ast.util.ExpressionExtractor;
+import gr.uom.java.ast.util.MethodDeclarationUtility;
+import gr.uom.java.ast.util.StatementExtractor;
+
 public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	private Map<Expression, ArrayList<Statement>> typeCheckMap;
 	private ArrayList<Statement> defaultCaseStatements;
@@ -93,6 +94,8 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	private double averageNumberOfStatements;
 	private Integer userRate;
 	
+	public Map<SimpleName, LinkedHashSet<VariableDeclarationFragment>> staticFieldToUsedFieldsMap; // key = typeCheck Field, value => fields that are used inside the typechecking branch that of the typeCheck 
+	
 	public TypeCheckElimination() {
 		this.typeCheckMap = new LinkedHashMap<Expression, ArrayList<Statement>>();
 		this.defaultCaseStatements = new ArrayList<Statement>();
@@ -126,6 +129,7 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 		this.remainingIfStatementExpressionMap = new LinkedHashMap<Expression, DefaultMutableTreeNode>();
 		this.abstractMethodName = null;
 		this.assignedFieldsToValuesMap = new LinkedHashMap<VariableDeclarationFragment, Set<Expression>>();
+		this.staticFieldToUsedFieldsMap = new HashMap<SimpleName, LinkedHashSet<VariableDeclarationFragment>>();
 	}
 	
 	public void addTypeCheck(Expression expression, Statement statement) {
@@ -185,6 +189,40 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	public void addAccessedField(VariableDeclarationFragment fragment) {
 		accessedFields.add(fragment);
 	}
+	
+	public void addFieldToUsedFieldsMap(VariableDeclarationFragment fragment, Statement statement) {
+		for (Expression exp : typeCheckMap.keySet()) {
+			Set<Statement> statementsSet = new HashSet<Statement>(typeCheckMap.get(exp));
+            if (statementsSet.contains(statement)) {
+                List<SimpleName> typeCheckFields = staticFieldMap.get(exp);
+                for (SimpleName typeCheckfield : typeCheckFields) {
+                	if (!staticFieldToUsedFieldsMap.containsKey(typeCheckfield)) {
+                		staticFieldToUsedFieldsMap.put(typeCheckfield, new LinkedHashSet<VariableDeclarationFragment>());
+                	}
+                	staticFieldToUsedFieldsMap.get(typeCheckfield).add(fragment);
+                }
+            }
+        }	
+	}
+	
+	public void addFieldToUsedFieldsMap(VariableDeclarationFragment fragment, Expression expression) {
+		List<SimpleName> typeCheckFields = staticFieldMap.get(expression);
+        for (SimpleName typeCheckfield : typeCheckFields) {
+        	if (!staticFieldToUsedFieldsMap.containsKey(typeCheckfield)) {
+        		staticFieldToUsedFieldsMap.put(typeCheckfield, new LinkedHashSet<VariableDeclarationFragment>());
+        	}
+        	staticFieldToUsedFieldsMap.get(typeCheckfield).add(fragment);
+        }
+	}
+	
+	public Set<VariableDeclarationFragment> getFieldsUsedInTypeCheckingBranches(){
+		Set<VariableDeclarationFragment> fields = new HashSet<VariableDeclarationFragment>();
+		for (SimpleName tcf : staticFieldToUsedFieldsMap.keySet()) {
+			fields.addAll(staticFieldToUsedFieldsMap.get(tcf));
+		}
+		return fields;
+	}
+	
 	
 	public void addAssignedField(VariableDeclarationFragment fragment) {
 		assignedFields.add(fragment);

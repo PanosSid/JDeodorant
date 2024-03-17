@@ -631,8 +631,10 @@ public class TypeCheckCodeFragmentAnalyzer {
 														isAssigned = true;
 														typeCheckElimination.addAssignedField(fragment);
 														typeCheckElimination.addAssignedFieldsAndValues(fragment, assignment.getRightHandSide());
-														if(!assignment.getOperator().equals(Assignment.Operator.ASSIGN))
+														if(!assignment.getOperator().equals(Assignment.Operator.ASSIGN)) {
 															typeCheckElimination.addAccessedField(fragment);
+															typeCheckElimination.addFieldToUsedFieldsMap(fragment, statement);
+														}
 													}
 												}
 												else if(parentExpression.getParent() instanceof PostfixExpression) {
@@ -640,6 +642,7 @@ public class TypeCheckCodeFragmentAnalyzer {
 													isAssigned = true;
 													typeCheckElimination.addAssignedField(fragment);
 													typeCheckElimination.addAccessedField(fragment);
+													typeCheckElimination.addFieldToUsedFieldsMap(fragment, statement);
 												}
 												else if(parentExpression.getParent() instanceof PrefixExpression) {
 													PrefixExpression prefixExpression = (PrefixExpression)parentExpression.getParent();
@@ -648,10 +651,13 @@ public class TypeCheckCodeFragmentAnalyzer {
 														isAssigned = true;
 														typeCheckElimination.addAssignedField(fragment);
 														typeCheckElimination.addAccessedField(fragment);
+														typeCheckElimination.addFieldToUsedFieldsMap(fragment, statement);
 													}
 												}
-												if(!isAssigned)
+												if(!isAssigned) {
 													typeCheckElimination.addAccessedField(fragment);
+													typeCheckElimination.addFieldToUsedFieldsMap(fragment, statement);
+												}
 											}
 										}
 									}
@@ -908,6 +914,7 @@ public class TypeCheckCodeFragmentAnalyzer {
 															isAssigned = true;
 															typeCheckElimination.addAssignedField(fragment);
 															typeCheckElimination.addAssignedFieldsAndValues(fragment, assignment.getRightHandSide());
+															typeCheckElimination.addFieldToUsedFieldsMap(fragment, variableInstruction);
 															if(!assignment.getOperator().equals(Assignment.Operator.ASSIGN))
 																typeCheckElimination.addAccessedField(fragment);
 														}
@@ -917,6 +924,7 @@ public class TypeCheckCodeFragmentAnalyzer {
 														isAssigned = true;
 														typeCheckElimination.addAssignedField(fragment);
 														typeCheckElimination.addAccessedField(fragment);
+														typeCheckElimination.addFieldToUsedFieldsMap(fragment, variableInstruction);
 													}
 													else if(parentExpression.getParent() instanceof PrefixExpression) {
 														PrefixExpression prefixExpression = (PrefixExpression)parentExpression.getParent();
@@ -925,10 +933,13 @@ public class TypeCheckCodeFragmentAnalyzer {
 															isAssigned = true;
 															typeCheckElimination.addAssignedField(fragment);
 															typeCheckElimination.addAccessedField(fragment);
+															typeCheckElimination.addFieldToUsedFieldsMap(fragment, variableInstruction);
 														}
 													}
-													if(!isAssigned)
+													if(!isAssigned) {
 														typeCheckElimination.addAccessedField(fragment);
+														typeCheckElimination.addFieldToUsedFieldsMap(fragment, variableInstruction);														
+													}
 												}
 											}
 										}
