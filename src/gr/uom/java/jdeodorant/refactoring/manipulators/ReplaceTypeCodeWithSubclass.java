@@ -92,7 +92,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	private Map<SimpleName, String> additionalStaticFieldMap;
 	private String baseClassName;
 	private Map<ICompilationUnit, CreateCompilationUnitChange> createCompilationUnitChanges;
-	private TypeDeclaration contextClassTypeDecleration;
+	private TypeDeclaration baseClassTypeDecleration;
 	
 	public ReplaceTypeCodeWithSubclass(IFile sourceFile, CompilationUnit sourceCompilationUnit,
 			TypeDeclaration sourceTypeDeclaration, TypeCheckElimination typeCheckElimination) {
@@ -111,7 +111,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		}
 		this.baseClassName = typeCheckElimination.getTypeCheckClass().getName().getIdentifier();
 		this.createCompilationUnitChanges = new LinkedHashMap<ICompilationUnit, CreateCompilationUnitChange>();
-		this.contextClassTypeDecleration = typeCheckElimination.getTypeCheckClass();
+		this.baseClassTypeDecleration = typeCheckElimination.getTypeCheckClass();
 	}
 
 	@Override
@@ -138,7 +138,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		final RefactoringStatus status= new RefactoringStatus();
 		try {
 			pm.beginTask("Checking preconditions...", 2);
-			modifyContext();
+			modifyBaseClass();
 			createSubclasses();
 		} finally {
 			pm.done();
@@ -146,11 +146,11 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		return status;
 	}
 	
-	private void modifyContext() {
+	private void modifyBaseClass() {
 		ASTRewrite sourceRewriter = ASTRewrite.create(sourceTypeDeclaration.getAST());
 		AST contextAST = sourceTypeDeclaration.getAST();
-		makeContextAbstract(contextAST, sourceRewriter);
-		changeFieldModifierToProtected(contextAST, sourceRewriter);
+		makeBaseClassAbstract(contextAST, sourceRewriter);
+		changeFieldModifiersToProtected(contextAST, sourceRewriter);
 		
 		try {
 			TextEdit sourceEdit = sourceRewriter.rewriteAST();
@@ -164,8 +164,8 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		
 	}
 	
-	private void makeContextAbstract(AST contextAST, ASTRewrite sourceRewriter) {
-		TypeDeclaration typeDecl = this.contextClassTypeDecleration;
+	private void makeBaseClassAbstract(AST contextAST, ASTRewrite sourceRewriter) {
+		TypeDeclaration typeDecl = this.baseClassTypeDecleration;
 		MethodDeclaration methodDec = typeCheckElimination.getTypeCheckMethod();
 		
 		ListRewrite modifiersRewrite = sourceRewriter.getListRewrite(typeDecl, TypeDeclaration.MODIFIERS2_PROPERTY);
@@ -179,8 +179,8 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	}
 	
 	// Replacing the modifiers of fields that are used in subclasses from private to protected
-	private void changeFieldModifierToProtected(AST contextAST, ASTRewrite sourceRewriter) {
-		TypeDeclaration typeDecl = this.contextClassTypeDecleration;
+	private void changeFieldModifiersToProtected(AST contextAST, ASTRewrite sourceRewriter) {
+		TypeDeclaration typeDecl = this.baseClassTypeDecleration;
 		Set<VariableDeclarationFragment> fieldsToChange = typeCheckElimination.getFieldsUsedInTypeCheckingBranches();
 
 		for (FieldDeclaration fieldDecl : typeDecl.getFields()) {
