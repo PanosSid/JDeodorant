@@ -151,6 +151,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		AST contextAST = sourceTypeDeclaration.getAST();
 		makeBaseClassAbstract(contextAST, sourceRewriter);
 		changeFieldModifiersToProtected(contextAST, sourceRewriter);
+		changeMethodModifiersToProtected(contextAST, sourceRewriter);
 		
 		try {
 			TextEdit sourceEdit = sourceRewriter.rewriteAST();
@@ -208,6 +209,36 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	    }
 	    
 	}
+	
+	// Replacing the modifiers of methods that are used in subclasses from private to protected
+	private void changeMethodModifiersToProtected(AST contextAST, ASTRewrite sourceRewriter) {
+	    TypeDeclaration typeDecl = this.baseClassTypeDecleration;
+	    Set<MethodDeclaration> methodsToChange = typeCheckElimination.getAccessedMethods();
+
+	    for (MethodDeclaration methodDecl : typeDecl.getMethods()) {
+	        if (methodsToChange.contains(methodDecl)) {
+	            List modifiers = methodDecl.modifiers();
+	            Modifier privateModifier = null;
+	            for (Object mod : modifiers) {
+	                if (mod instanceof Modifier && ((Modifier) mod).isPrivate()) {
+	                    privateModifier = (Modifier) mod;
+	                    break;
+	                }
+	            }
+
+	            if (privateModifier != null) {
+	                sourceRewriter.set(privateModifier, Modifier.KEYWORD_PROPERTY,  Modifier.ModifierKeyword.PROTECTED_KEYWORD, null);
+	            } else {
+	                Modifier protectedModifier = contextAST.newModifier(Modifier.ModifierKeyword.PROTECTED_KEYWORD);
+	                ListRewrite modifiersListRewrite = sourceRewriter.getListRewrite(methodDecl, MethodDeclaration.MODIFIERS2_PROPERTY);
+	                modifiersListRewrite.insertLast(protectedModifier, null);
+	            }
+	        }
+	    }
+	}
+
+	
+	
 	
 	private void createSubclasses() {
 		List<String> subclassNames = new ArrayList<String>(staticFieldMap.values());
