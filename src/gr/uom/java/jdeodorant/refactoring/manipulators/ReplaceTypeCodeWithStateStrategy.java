@@ -48,7 +48,6 @@ import org.eclipse.jdt.core.dom.IPackageBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.IfStatement;
-import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.Javadoc;
 import org.eclipse.jdt.core.dom.MemberRef;
@@ -2765,43 +2764,6 @@ public class ReplaceTypeCodeWithStateStrategy extends PolymorphismRefactoring {
 		Set<ITypeBinding> finalTypeBindings = new LinkedHashSet<ITypeBinding>();
 		RefactoringUtility.getSimpleTypeBindings(typeBindings, finalTypeBindings);
         return finalTypeBindings;
-	}
-
-	private void addImportDeclaration(ITypeBinding typeBinding, CompilationUnit targetCompilationUnit, ASTRewrite targetRewriter) {
-		String qualifiedName = typeBinding.getQualifiedName();
-		String qualifiedPackageName = "";
-		if(qualifiedName.contains("."))
-			qualifiedPackageName = qualifiedName.substring(0,qualifiedName.lastIndexOf("."));
-		PackageDeclaration sourcePackageDeclaration = sourceCompilationUnit.getPackage();
-		String sourcePackageDeclarationName = "";
-		if(sourcePackageDeclaration != null)
-			sourcePackageDeclarationName = sourcePackageDeclaration.getName().getFullyQualifiedName();     
-		if(!qualifiedPackageName.equals("") && !qualifiedPackageName.equals("java.lang") &&
-				!qualifiedPackageName.equals(sourcePackageDeclarationName) && !typeBinding.isNested()) {
-			List<ImportDeclaration> importDeclarationList = targetCompilationUnit.imports();
-			boolean found = false;
-			for(ImportDeclaration importDeclaration : importDeclarationList) {
-				if(!importDeclaration.isOnDemand()) {
-					if(qualifiedName.equals(importDeclaration.getName().getFullyQualifiedName())) {
-						found = true;
-						break;
-					}
-				}
-				else {
-					if(qualifiedPackageName.equals(importDeclaration.getName().getFullyQualifiedName())) {
-						found = true;
-						break;
-					}
-				}
-			}
-			if(!found) {
-				AST ast = targetCompilationUnit.getAST();
-				ImportDeclaration importDeclaration = ast.newImportDeclaration();
-				targetRewriter.set(importDeclaration, ImportDeclaration.NAME_PROPERTY, ast.newName(qualifiedName), null);
-				ListRewrite importRewrite = targetRewriter.getListRewrite(targetCompilationUnit, CompilationUnit.IMPORTS_PROPERTY);
-				importRewrite.insertLast(importDeclaration, null);
-			}
-		}
 	}
 
 	private void setPublicModifierToStaticFields() {

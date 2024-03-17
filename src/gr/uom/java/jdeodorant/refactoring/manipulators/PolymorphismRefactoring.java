@@ -36,10 +36,12 @@ import org.eclipse.jdt.core.dom.IExtendedModifier;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
+import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
+import org.eclipse.jdt.core.dom.PackageDeclaration;
 import org.eclipse.jdt.core.dom.PostfixExpression;
 import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.PrimitiveType;
@@ -1140,5 +1142,42 @@ public abstract class PolymorphismRefactoring extends Refactoring {
 			tempName.subSequence(1, tempName.length()).toString();
 		}
 		return subclassName;
+	}
+
+	protected void addImportDeclaration(ITypeBinding typeBinding, CompilationUnit targetCompilationUnit, ASTRewrite targetRewriter) {
+		String qualifiedName = typeBinding.getQualifiedName();
+		String qualifiedPackageName = "";
+		if(qualifiedName.contains("."))
+			qualifiedPackageName = qualifiedName.substring(0,qualifiedName.lastIndexOf("."));
+		PackageDeclaration sourcePackageDeclaration = sourceCompilationUnit.getPackage();
+		String sourcePackageDeclarationName = "";
+		if(sourcePackageDeclaration != null)
+			sourcePackageDeclarationName = sourcePackageDeclaration.getName().getFullyQualifiedName();     
+		if(!qualifiedPackageName.equals("") && !qualifiedPackageName.equals("java.lang") &&
+				!qualifiedPackageName.equals(sourcePackageDeclarationName) && !typeBinding.isNested()) {
+			List<ImportDeclaration> importDeclarationList = targetCompilationUnit.imports();
+			boolean found = false;
+			for(ImportDeclaration importDeclaration : importDeclarationList) {
+				if(!importDeclaration.isOnDemand()) {
+					if(qualifiedName.equals(importDeclaration.getName().getFullyQualifiedName())) {
+						found = true;
+						break;
+					}
+				}
+				else {
+					if(qualifiedPackageName.equals(importDeclaration.getName().getFullyQualifiedName())) {
+						found = true;
+						break;
+					}
+				}
+			}
+			if(!found) {
+				AST ast = targetCompilationUnit.getAST();
+				ImportDeclaration importDeclaration = ast.newImportDeclaration();
+				targetRewriter.set(importDeclaration, ImportDeclaration.NAME_PROPERTY, ast.newName(qualifiedName), null);
+				ListRewrite importRewrite = targetRewriter.getListRewrite(targetCompilationUnit, CompilationUnit.IMPORTS_PROPERTY);
+				importRewrite.insertLast(importDeclaration, null);
+			}
+		}
 	}
 }
