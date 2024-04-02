@@ -6,6 +6,8 @@ import gr.uom.java.ast.ClassObject;
 import gr.uom.java.ast.CompilationErrorDetectedException;
 import gr.uom.java.ast.CompilationUnitCache;
 import gr.uom.java.ast.SystemObject;
+import gr.uom.java.ast.delegation.DelegationDetection;
+import gr.uom.java.ast.delegation.DelegationTree;
 import gr.uom.java.jdeodorant.preferences.PreferenceConstants;
 import gr.uom.java.jdeodorant.refactoring.Activator;
 import gr.uom.java.jdeodorant.refactoring.manipulators.ReplaceConditionalWithPolymorphism;
@@ -594,7 +596,8 @@ public class TypeChecking extends ViewPart {
 					} else if (refactoringName.equals("Replace Typecode with State/Strategy") || refactoringName.equals("Replace Typecode with Strategy")  || refactoringName.equals("Replace Typecode with State")) {
 						refactoring = new ReplaceTypeCodeWithStateStrategy(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);						
 					} else if (refactoringName.equals("Replace Typecode with Subclass")) { 
-						// temp
+						DelegationDetection dd = new DelegationDetection(ASTReader.getSystemObject());
+//						DelegationTree dt = new DelegationTree(ASTReader.getSystemObject(), null);
 						refactoring = new ReplaceTypeCodeWithSubclass(sourceFile, sourceCompilationUnit, sourceTypeDeclaration, typeCheckElimination);
 //						refactoring = null;
 					}

@@ -159,6 +159,7 @@ public class ClassObject extends ClassDeclarationObject {
     								methodObject.getMethodDeclaration(), iFile);
     						if((typeCheckElimination.getTypeField() != null || typeCheckElimination.getTypeLocalVariable() != null || typeCheckElimination.getTypeMethodInvocation() != null) &&
     								typeCheckElimination.allTypeCheckingsContainStaticFieldOrSubclassType() && typeCheckElimination.isApplicable()) {
+    							typeCheckElimination.setClassObject(this);
     							typeCheckEliminations.add(typeCheckElimination);
     						}
     					}

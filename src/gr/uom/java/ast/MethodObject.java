@@ -44,6 +44,7 @@ public class MethodObject implements AbstractMethodDeclaration {
     private boolean _static;
     private boolean _synchronized;
     private boolean _native;
+    private boolean _protected;
     private ConstructorObject constructorObject;
     private boolean testAnnotation;
     private volatile int hashCode = 0;
@@ -96,7 +97,15 @@ public class MethodObject implements AbstractMethodDeclaration {
     public void setNative(boolean n) {
     	this._native = n;
     }
-
+    
+    public boolean isProtected() {
+    	return this._protected;
+    }
+    
+	public void setProtected(boolean b) {
+		this._protected = b;
+		
+	}
     public String getName() {
         return constructorObject.getName();
     }
@@ -779,4 +788,5 @@ public class MethodObject implements AbstractMethodDeclaration {
     public String getSignature() {
     	return constructorObject.getSignature();
     }
+
 }

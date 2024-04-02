@@ -573,6 +573,7 @@ public class TypeCheckCodeFragmentAnalyzer {
 							for(MethodDeclaration method : methods) {
 								if(method.resolveBinding().isEqualTo(methodBinding)) {
 									typeCheckElimination.addAccessedMethod(method);
+									typeCheckElimination.addMethodToUsedMethodsMap(method, statement);
 								}
 							}
 						}

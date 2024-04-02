@@ -29,6 +29,7 @@ import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
+import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.PostfixExpression;
 import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.QualifiedName;
@@ -47,6 +48,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
+import gr.uom.java.ast.ClassObject;
 import gr.uom.java.ast.decomposition.CompositeStatementObject;
 import gr.uom.java.ast.inheritance.InheritanceTree;
 import gr.uom.java.ast.util.ExpressionExtractor;
@@ -94,7 +96,9 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	private double averageNumberOfStatements;
 	private Integer userRate;
 	
-	public Map<SimpleName, LinkedHashSet<VariableDeclarationFragment>> staticFieldToUsedFieldsMap; // key = typeCheck Field, value => fields that are used inside the typechecking branch that of the typeCheck 
+	public Map<SimpleName, LinkedHashSet<VariableDeclarationFragment>> staticFieldToUsedPrivateFieldsMap; // key = typeCheck Field, value => fields that are used inside the typechecking branch that of the typeCheck
+	public Map<SimpleName, LinkedHashSet<MethodDeclaration>> staticFieldToUsedMethodsMap;
+	private ClassObject classObject;
 	
 	public TypeCheckElimination() {
 		this.typeCheckMap = new LinkedHashMap<Expression, ArrayList<Statement>>();
@@ -129,7 +133,8 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 		this.remainingIfStatementExpressionMap = new LinkedHashMap<Expression, DefaultMutableTreeNode>();
 		this.abstractMethodName = null;
 		this.assignedFieldsToValuesMap = new LinkedHashMap<VariableDeclarationFragment, Set<Expression>>();
-		this.staticFieldToUsedFieldsMap = new HashMap<SimpleName, LinkedHashSet<VariableDeclarationFragment>>();
+		this.staticFieldToUsedPrivateFieldsMap = new HashMap<SimpleName, LinkedHashSet<VariableDeclarationFragment>>();
+		this.staticFieldToUsedMethodsMap = new HashMap<SimpleName, LinkedHashSet<MethodDeclaration>>();
 	}
 	
 	public void addTypeCheck(Expression expression, Statement statement) {
@@ -196,10 +201,13 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
             if (statementsSet.contains(statement)) {
                 List<SimpleName> typeCheckFields = staticFieldMap.get(exp);
                 for (SimpleName typeCheckfield : typeCheckFields) {
-                	if (!staticFieldToUsedFieldsMap.containsKey(typeCheckfield)) {
-                		staticFieldToUsedFieldsMap.put(typeCheckfield, new LinkedHashSet<VariableDeclarationFragment>());
+                	if (!staticFieldToUsedPrivateFieldsMap.containsKey(typeCheckfield)) {
+                		staticFieldToUsedPrivateFieldsMap.put(typeCheckfield, new LinkedHashSet<VariableDeclarationFragment>());
                 	}
-                	staticFieldToUsedFieldsMap.get(typeCheckfield).add(fragment);
+                	
+                	if (isVariableDeclarationFragmentPrivateField(fragment)) {
+                		staticFieldToUsedPrivateFieldsMap.get(typeCheckfield).add(fragment);        		
+                	}
                 }
             }
         }	
@@ -208,21 +216,75 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 	public void addFieldToUsedFieldsMap(VariableDeclarationFragment fragment, Expression expression) {
 		List<SimpleName> typeCheckFields = staticFieldMap.get(expression);
         for (SimpleName typeCheckfield : typeCheckFields) {
-        	if (!staticFieldToUsedFieldsMap.containsKey(typeCheckfield)) {
-        		staticFieldToUsedFieldsMap.put(typeCheckfield, new LinkedHashSet<VariableDeclarationFragment>());
+        	if (!staticFieldToUsedPrivateFieldsMap.containsKey(typeCheckfield)) {
+        		staticFieldToUsedPrivateFieldsMap.put(typeCheckfield, new LinkedHashSet<VariableDeclarationFragment>());
         	}
-        	staticFieldToUsedFieldsMap.get(typeCheckfield).add(fragment);
+        	
+        	if (isVariableDeclarationFragmentPrivateField(fragment)) {
+        		staticFieldToUsedPrivateFieldsMap.get(typeCheckfield).add(fragment);        		
+        	}
         }
+	}
+	
+	private boolean isVariableDeclarationFragmentPrivateField(VariableDeclarationFragment fragment) {
+	    if (fragment.getParent() instanceof FieldDeclaration) {
+	        FieldDeclaration fieldDeclaration = (FieldDeclaration) fragment.getParent();
+	        return Modifier.isPrivate(fieldDeclaration.getModifiers());
+	    }
+	    return false;
+	}
+	
+	public void addMethodToUsedMethodsMap(MethodDeclaration method, Statement statement) {
+		for (Expression exp: typeCheckMap.keySet()) {
+			List<Statement> stmnts = typeCheckMap.get(exp);
+			if (stmnts != null && stmnts.contains(statement)) {
+				for (SimpleName sn : staticFieldMap.get(exp) ) {
+					if (!staticFieldToUsedMethodsMap.containsKey(sn)) {
+						staticFieldToUsedMethodsMap.put(sn, new LinkedHashSet<MethodDeclaration>());				
+					}
+					staticFieldToUsedMethodsMap.get(sn).add(method);
+				}
+			}
+		}
+	}
+	
+	public LinkedHashSet<MethodDeclaration> getMethodsUsedInsideStaticFieldBranch(SimpleName staticField){
+		if (staticFieldToUsedMethodsMap.containsKey(staticField)) {
+			return staticFieldToUsedMethodsMap.get(staticField);
+		} else {
+			return new LinkedHashSet<MethodDeclaration>();
+		}
+	}
+	
+	public Set<VariableDeclarationFragment> getCommonFieldsUsedInTypeCheckingBranches(){
+		Set<VariableDeclarationFragment> commonFields = null;
+		for (LinkedHashSet<VariableDeclarationFragment> fields : staticFieldToUsedPrivateFieldsMap.values()) {
+            if (commonFields == null) {
+            	commonFields = new LinkedHashSet<VariableDeclarationFragment>(fields);
+            } else {
+            	commonFields.retainAll(fields);
+            }
+        }
+        
+		return commonFields;
+	}
+	
+	// temp
+	public Set<VariableDeclarationFragment> getFieldsUsedInTypeCheckingBranches(SimpleName staticField){
+		if  (staticFieldToUsedPrivateFieldsMap.containsKey(staticField)) {
+			return staticFieldToUsedPrivateFieldsMap.get(staticField);			
+		} else {
+			return new LinkedHashSet<VariableDeclarationFragment>(); 
+		}
 	}
 	
 	public Set<VariableDeclarationFragment> getFieldsUsedInTypeCheckingBranches(){
 		Set<VariableDeclarationFragment> fields = new HashSet<VariableDeclarationFragment>();
-		for (SimpleName tcf : staticFieldToUsedFieldsMap.keySet()) {
-			fields.addAll(staticFieldToUsedFieldsMap.get(tcf));
+		for (SimpleName tcf : staticFieldToUsedPrivateFieldsMap.keySet()) {
+			fields.addAll(staticFieldToUsedPrivateFieldsMap.get(tcf));
 		}
 		return fields;
 	}
-	
 	
 	public void addAssignedField(VariableDeclarationFragment fragment) {
 		assignedFields.add(fragment);
@@ -479,6 +541,14 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
 
 	public void putStaticFieldSubclassTypeMapping(SimpleName staticField, String subclassType) {
 		staticFieldSubclassTypeMap.put(staticField, subclassType);
+	}
+	
+	public ClassObject getClassObject() {
+		return classObject;
+	}
+
+	public void setClassObject(ClassObject classObject) {
+		this.classObject = classObject;
 	}
 
 	public boolean allTypeCheckingsContainStaticFieldOrSubclassType() {

@@ -20,6 +20,7 @@ import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
+import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.ReturnStatement;
@@ -179,6 +180,25 @@ public class MethodDeclarationUtility {
 		return methodDeclaration.isConstructor() ? methodDeclaration.getName() : null;
 	}
 	
+	public static boolean isPrivate(MethodDeclaration methodDeclaration) {
+		if (methodDeclaration == null) {
+			throw new IllegalArgumentException("MethodDeclaration cannot be null");
+		}
+
+		int modifiers = methodDeclaration.getModifiers();
+		return Modifier.isPrivate(modifiers);
+	}
+	
+	public static boolean isPublic(MethodDeclaration methodDeclaration) {
+		if (methodDeclaration == null) {
+			throw new IllegalArgumentException("MethodDeclaration cannot be null");
+		}
+
+		int modifiers = methodDeclaration.getModifiers();
+		return Modifier.isPublic(modifiers);
+	}
+
+
 	public static AbstractVariable createVariable(SimpleName simpleName, AbstractVariable rightPart) {
 		IBinding binding = simpleName.resolveBinding();
 		if(binding != null && binding.getKind() == IBinding.VARIABLE) {
