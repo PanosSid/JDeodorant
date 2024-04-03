@@ -604,6 +604,8 @@ public class ASTReader2 {
 				methodObject.setNative(true);
 			if ((methodModifiers & Modifier.PROTECTED) != 0)
 			    methodObject.setProtected(true);
+			if ((methodModifiers & Modifier.PUBLIC) != 0)
+			    methodObject.setPublic(true);
 			
 			classObject.addMethod(methodObject);
 //			FieldInstructionObject fieldInstruction = methodObject.isGetter();

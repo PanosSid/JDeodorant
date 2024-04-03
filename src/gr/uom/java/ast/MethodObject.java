@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
@@ -45,6 +46,7 @@ public class MethodObject implements AbstractMethodDeclaration {
     private boolean _synchronized;
     private boolean _native;
     private boolean _protected;
+    private boolean _public;
     private ConstructorObject constructorObject;
     private boolean testAnnotation;
     private volatile int hashCode = 0;
@@ -106,6 +108,16 @@ public class MethodObject implements AbstractMethodDeclaration {
 		this._protected = b;
 		
 	}
+	
+	public boolean isPublic() {
+		return this._public;
+	}
+
+	public void setPublic(boolean b) {
+		this._public = b;
+		
+	}
+	
     public String getName() {
         return constructorObject.getName();
     }

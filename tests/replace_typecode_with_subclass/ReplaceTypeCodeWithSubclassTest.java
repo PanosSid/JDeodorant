@@ -40,6 +40,8 @@ import org.junit.jupiter.api.Test;
 import gr.uom.java.ast.ASTReader;
 import gr.uom.java.ast.ClassObject;
 import gr.uom.java.ast.CompilationErrorDetectedException;
+import gr.uom.java.ast.ConstructorObject;
+import gr.uom.java.ast.CreationObject;
 import gr.uom.java.ast.FieldObject;
 import gr.uom.java.ast.MethodObject;
 import gr.uom.java.ast.SystemObject;
@@ -336,6 +338,24 @@ class ReplaceTypeCodeWithSubclassTest {
 		for (String sharedField : sharedFieldsNames) {
 			Assertions.assertTrue(allFieldNames.contains(sharedField), "Verify base class contains shared fields");			
 		}
+	}
+	
+	@Test
+	void verifyBaseClassReplaceConstructorWithFactoryMethod() {
+		MethodObject factoryMethod = getMethodOfClassObjectByName(baseClass, "create");
+		Assertions.assertNotNull(factoryMethod);
+		Assertions.assertTrue(factoryMethod.isPublic());
+		Assertions.assertTrue(factoryMethod.isStatic());
+		ClassObject originalBaseClass = typeCheckElimination.getClassObject();
+		ConstructorObject oldConstructor = originalBaseClass.getConstructorIterator().next();
+		
+		// assert that the originalConstructor and the factory method have tha same exact paramters
+		Assertions.assertEquals(oldConstructor.getParameterList(), factoryMethod.getParameterList());
+		Assertions.assertEquals(oldConstructor.getParameterTypeList(), factoryMethod.getParameterTypeList());
+		
+		List<CreationObject> creationsList = factoryMethod.getMethodBody().getCreations();
+		Assertions.assertEquals(typeCheckElimination.getStaticFields().size() + 1, creationsList.size()); 	// #num of subclass creations, 1 exception creation
+		
 	}
 	
 	

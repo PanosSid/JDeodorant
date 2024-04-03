@@ -31,6 +31,7 @@ import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
@@ -41,6 +42,7 @@ import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.IfStatement;
+import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.Javadoc;
 import org.eclipse.jdt.core.dom.MemberRef;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
@@ -51,8 +53,12 @@ import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Statement;
+import org.eclipse.jdt.core.dom.StringLiteral;
 import org.eclipse.jdt.core.dom.SuperConstructorInvocation;
+import org.eclipse.jdt.core.dom.SwitchCase;
+import org.eclipse.jdt.core.dom.SwitchStatement;
 import org.eclipse.jdt.core.dom.TagElement;
+import org.eclipse.jdt.core.dom.ThrowStatement;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclaration;
@@ -331,8 +337,8 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		try {
 			pm.beginTask("Checking preconditions...", 2);
 //			searchEmployeeConstructorInvocations();
-			modifyBaseClass();
 			createSubclasses();
+			modifyBaseClass();
 		} finally {
 			pm.done();
 		}
@@ -349,6 +355,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		changeMethodModifiersToProtected(baseClassAST, sourceRewriter);
 		removeMethodsThatWillBePushedDown(sourceRewriter);
 		removeFieldsThatWillBePushedDown(sourceRewriter);
+		createFactoryMethod(baseClassAST, sourceRewriter);
 		modifyBaseClassConstructorToSetOnlySharedFields(baseClassAST, sourceRewriter);
 		
 		try {
@@ -362,7 +369,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		}
 		
 	}
-	
+
 	private void makeBaseClassAbstract(AST contextAST, ASTRewrite sourceRewriter) {
 		TypeDeclaration typeDecl = this.baseClassTypeDecleration;
 		MethodDeclaration methodDec = typeCheckElimination.getTypeCheckMethod();
@@ -490,6 +497,129 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	    }
 	    rewriter.replace(constructor.getBody(), newBlock, null);
 	}
+
+	
+	private void createFactoryMethod(AST ast, ASTRewrite rewriter) {	
+		MethodDeclaration factoryMethod = ast.newMethodDeclaration();
+		SimpleName typeName = ast.newSimpleName(baseClassTypeDecleration.getName().getIdentifier());
+		factoryMethod.setReturnType2(ast.newSimpleType(typeName));
+		factoryMethod.setName(ast.newSimpleName("create"));
+		factoryMethod.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.PUBLIC_KEYWORD));
+		factoryMethod.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.STATIC_KEYWORD));
+		
+		
+		String parameterNameOfTypeField = findParameterSettingField();
+		MethodDeclaration oldConstructor = typeCheckElimination.getTypeFieldConsturctorMethod();
+		if (oldConstructor != null) {
+		    ListRewrite parameterRewrite = rewriter.getListRewrite(factoryMethod, MethodDeclaration.PARAMETERS_PROPERTY);
+		    for (Object parameter : oldConstructor.parameters()) {
+		        SingleVariableDeclaration param = (SingleVariableDeclaration) parameter;
+		        parameterRewrite.insertLast(ASTNode.copySubtree(ast, param), null);		        	
+		    }
+		}
+		
+		Block methodBody = ast.newBlock();
+
+		SwitchStatement swst = createSwitchStatement(ast, rewriter);
+		
+		ListRewrite bodyRewrite = rewriter.getListRewrite(methodBody, Block.STATEMENTS_PROPERTY);
+		bodyRewrite.insertLast(swst, null);
+		
+		rewriter.set(factoryMethod, MethodDeclaration.BODY_PROPERTY, methodBody, null);
+
+		ListRewrite baseClassListRewriter = rewriter.getListRewrite(baseClassTypeDecleration, TypeDeclaration.BODY_DECLARATIONS_PROPERTY);
+		
+		baseClassListRewriter.insertLast(factoryMethod, null);
+		
+	}
+
+    private SwitchStatement createSwitchStatement(AST ast, ASTRewrite rewriter) {
+    	String fieldName = findParameterSettingField();
+        SwitchStatement switchStatement = ast.newSwitchStatement();
+        SimpleName typeName = ast.newSimpleName(fieldName);
+        switchStatement.setExpression(typeName);
+        
+        ListRewrite switchStatementsRewrite = rewriter.getListRewrite(switchStatement, SwitchStatement.STATEMENTS_PROPERTY);
+
+        for (Map.Entry<SimpleName, String> entry : staticFieldMap.entrySet()) {
+            SimpleName caseField = entry.getKey();
+            String className = entry.getValue();
+
+            SwitchCase switchCase = ast.newSwitchCase();
+            switchCase.expressions().add(ast.newSimpleName(caseField.getIdentifier()));
+
+            ReturnStatement returnStatement = ast.newReturnStatement();
+            ClassInstanceCreation creation = ast.newClassInstanceCreation();
+            creation.setType(ast.newSimpleType(ast.newSimpleName(className)));
+            
+            Subclass sb = nameToSubclassMap.get(className);
+		    ListRewrite argumentRewrite = rewriter.getListRewrite(creation, ClassInstanceCreation.ARGUMENTS_PROPERTY);
+			for (VariableDeclarationFragment baseClassField : sb.getAllReferencedFields()) {
+				SimpleName argumentName = ast.newSimpleName(baseClassField.getName().getIdentifier());
+				argumentRewrite.insertLast(argumentName, null);
+			}
+			
+            returnStatement.setExpression(creation);
+
+            switchStatementsRewrite.insertLast(switchCase, null);
+            switchStatementsRewrite.insertLast(returnStatement, null);
+        }
+
+        SwitchCase defaultCase = ast.newSwitchCase();
+        defaultCase.setExpression(null); // Indicates the default case
+        ThrowStatement throwStatement = ast.newThrowStatement();
+        ClassInstanceCreation exceptionCreation = ast.newClassInstanceCreation();
+        exceptionCreation.setType(ast.newSimpleType(ast.newSimpleName("IllegalArgumentException")));
+        StringLiteral message = ast.newStringLiteral();
+        message.setLiteralValue("Incorrect type code value");
+        exceptionCreation.arguments().add(message);
+        throwStatement.setExpression(exceptionCreation);
+
+        switchStatementsRewrite.insertLast(defaultCase, null);
+        switchStatementsRewrite.insertLast(throwStatement, null);
+
+
+        return switchStatement;
+    }
+    
+	
+	private String findParameterSettingField() {
+		MethodDeclaration constructor = typeCheckElimination.getTypeFieldConsturctorMethod();
+		String fieldName = typeCheckElimination.getTypeField().getName().getIdentifier();
+
+	    Block body = constructor.getBody();
+	    for (Object stObj : body.statements()) {
+	    	Statement statement = (Statement) stObj;
+	        if (statement instanceof ExpressionStatement) {
+	            Expression expression = ((ExpressionStatement) statement).getExpression();
+	            
+	            if (expression instanceof Assignment) {
+	                Assignment assignment = (Assignment) expression;
+	                
+	                if (assignment.getLeftHandSide() instanceof FieldAccess) {
+	                    FieldAccess fieldAccess = (FieldAccess) assignment.getLeftHandSide();
+	                    if (fieldAccess.getName().getIdentifier().equals(fieldName)) {
+	                        if (assignment.getRightHandSide() instanceof SimpleName) {
+	                            SimpleName rightHandSideName = (SimpleName) assignment.getRightHandSide();
+	                            return rightHandSideName.getIdentifier();
+	                        }
+	                    }
+	                }
+	                else if (assignment.getLeftHandSide() instanceof SimpleName) {
+	                    SimpleName leftHandSideName = (SimpleName) assignment.getLeftHandSide();
+	                    if (leftHandSideName.getIdentifier().equals(fieldName)) {
+	                        if (assignment.getRightHandSide() instanceof SimpleName) {
+	                            SimpleName rightHandSideName = (SimpleName) assignment.getRightHandSide();
+	                            return rightHandSideName.getIdentifier();
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    }
+	    return null;
+	}
+	
 
 	
 	private void createSubclasses() {
