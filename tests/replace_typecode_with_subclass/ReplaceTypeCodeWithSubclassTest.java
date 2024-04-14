@@ -3,6 +3,7 @@ package replace_typecode_with_subclass;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -31,7 +32,6 @@ import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.ltk.core.refactoring.Change;
-import org.junit.Ignore;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -236,12 +236,6 @@ class ReplaceTypeCodeWithSubclassTest {
 		}
 	}
 	
-	@Ignore
-	@Test
-	void verifySubclasesHaveNotPushedDownPublicFields(){
-		Assertions.fail();
-	}
-	
 	@Test
 	void verifySubclassesHaveCorrectPushedDownMethods() {		
 		checkIfSubclassHavePushedDownMethods(SUBCLASS_TYPE_A, "methodToBePushedDownForA");
@@ -293,24 +287,53 @@ class ReplaceTypeCodeWithSubclassTest {
 	}
 	
 	@Test
+	void verifyBaseClassHaveNotPushedDownPublicFields(){
+		ListIterator<FieldObject> fIter = baseClass.getFieldIterator();
+		boolean foundPublicFields = false;
+		while (fIter.hasNext()) {
+			FieldObject fo = fIter.next();
+			if (fo.getName().equals("publicField1")) {
+				foundPublicFields = true;
+				break;
+			}
+		}
+		Assertions.assertTrue(foundPublicFields);
+	}
+	
+	@Test
+	void verifyBaseClassHaveNotPushedDownPrivateFieldsUsedByPublicMethods(){
+		ListIterator<FieldObject> fIter = baseClass.getFieldIterator();
+		boolean foundPublicFields = false;
+		while (fIter.hasNext()) {
+			FieldObject fo = fIter.next();
+			if (fo.getName().equals("a2")) {
+				foundPublicFields = true;
+				break;
+			}
+		}
+		Assertions.assertTrue(foundPublicFields);
+	}
+	
+	@Test
 	void verifyBaseClassHasDeletedPushedDownMethods() {
 		Set<String> pushedDownMethodNames = new HashSet<String>(Arrays.asList("methodToBePushedDownForA","methodToBePushedDownForB"));
 		for (MethodObject mo : baseClass.getMethodList()) {
-			if (pushedDownMethodNames.contains(mo.getClassName())) {
-				Assertions.fail(String.format("Method '%s' in base class is pushed to subclass.", mo.getName()));
+			if (pushedDownMethodNames.contains(mo.getName())) {
+				Assertions.fail(String.format("Method '%s' of base class should be pushed to subclass.", mo.getName()));
 			}
 		}
 	}
 	
 	@Test
-	void verifyBaseClassHasConvertedToProtectedSharedMethods() {
-		List<String> methodNames = Arrays.asList("methodToBePushedDownForB");
+	void verifyBaseClassHasConvertedToMethodToProtected() {
+		List<String> methodNames = Arrays.asList("methodToBeConvertedToProtected");
 		checkIfMethodsAreProtected(methodNames);
 	}
 
 	public static void checkIfMethodsAreProtected(List<String> methodNames) {
 		for (String methodName : methodNames) {
 			MethodObject methodInBaseClass = getMethodOfClassObjectByName(baseClass, methodName);
+			Assertions.assertNotNull(methodInBaseClass);
 			Assertions.assertTrue(methodInBaseClass.isProtected(),  String.format("Expected '%s' method in '%s' class to be protected, but it was not.", methodName, baseClass.getName()));
 		}
 	}

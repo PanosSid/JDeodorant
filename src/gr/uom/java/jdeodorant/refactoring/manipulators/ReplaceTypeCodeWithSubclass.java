@@ -42,7 +42,6 @@ import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.IfStatement;
-import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.Javadoc;
 import org.eclipse.jdt.core.dom.MemberRef;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
@@ -92,6 +91,17 @@ import gr.uom.java.ast.util.ExpressionExtractor;
 import gr.uom.java.ast.util.MethodDeclarationUtility;
 import gr.uom.java.ast.util.TypeVisitor;
 
+
+/**
+ * TODO:
+ * 1. Bind the consturctor creation in all classes (baseclass + subclasses) with their respective constructor creations
+ * 2. Bind original constructor param names with the fields that set!
+ * 3. Base class Constructor that has fileds not used by subclasses -> should also be used in Replace Constructor with Factory method
+ * 
+ * 3. Methods that use subclass fields + are private but are invoked by public method should stay at base class (which they do)
+ *    but all the fileds that they use should also stay at the base class!!
+ */
+
 public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	private VariableDeclaration returnedVariable;
 	private Set<ITypeBinding> requiredImportDeclarationsBasedOnSignature;
@@ -108,7 +118,11 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	private Set<VariableDeclarationFragment> baseClassSharedFields;
 	private Map<MethodDeclaration, Set<VariableDeclarationFragment>> methodToFieldsUsed;
 	private Set<MethodDeclaration> methodsUsedInSubclasses;
-	private Set<VariableDeclarationFragment> fieldsUsedByPublicMethods;
+	private Set<VariableDeclarationFragment> fieldsUsedByPublicMethods; // or by private methods that are invoked by public methods
+	private Set<MethodDeclaration> privateMethodsInvokedByPublicMethods;
+	private Set<VariableDeclarationFragment> fieldsToStayInBaseClass;
+	private Set<VariableDeclarationFragment> fieldsToConvertToProtected;
+	private Set<MethodDeclaration> methodsToConvertToProtected; 
 	
 	
 	public ReplaceTypeCodeWithSubclass(IFile sourceFile, CompilationUnit sourceCompilationUnit,
@@ -143,10 +157,19 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			this.nameToSubclassMap.put(subclassName, new Subclass(subclassName, typeCheckElimination.getTypeCheckClass(), typeCheckElimination, simpleName));
 		}
 		this.fieldsUsedByPublicMethods = new LinkedHashSet<VariableDeclarationFragment>();
+		this.privateMethodsInvokedByPublicMethods = new LinkedHashSet<MethodDeclaration>();
+		this.fieldsToStayInBaseClass = new LinkedHashSet<VariableDeclarationFragment>();
+		this.fieldsToConvertToProtected = new LinkedHashSet<VariableDeclarationFragment>();
+		this.methodsToConvertToProtected = new LinkedHashSet<MethodDeclaration>();
+		
 		setBaseClassSharedFields();
 		setFieldsUsedInBaseClassMethods();
+		setFieldsToStayInBaseClass();
 		setSubclassesExclusiveFields();
 		setCandidateMethodsToPushDown();
+		processFields();
+		processMethods();
+		
 		
 		
 	}
@@ -159,7 +182,11 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		private Set<VariableDeclarationFragment> allReferencedFields; // sharedFields + private fileds used in only in this methods typecheking classes
 		private TypeCheckElimination typeCheckElimination;
 		private Set<MethodDeclaration> candidateMethodsToPushDown;
+		private Set<VariableDeclarationFragment> fieldsUsedInTypeCheckingBranch;
+		private Set<MethodDeclaration> methodsUsedInTypeCheckingBranch;
 		
+		private Set<VariableDeclarationFragment> fieldsToPushDown2;
+		private Set<MethodDeclaration> methodsToPushDown2;
 		
 		public Subclass(String name, TypeDeclaration baseClassTypeDecleration, TypeCheckElimination typeCheckElimination, SimpleName staticField) {
 			this.name = name;
@@ -167,10 +194,39 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			this.typeCheckElimination = typeCheckElimination;
 			this.staticField = staticField;
 			this.candidateMethodsToPushDown = new LinkedHashSet<MethodDeclaration>();
+			this.fieldsUsedInTypeCheckingBranch = new LinkedHashSet<VariableDeclarationFragment>();
+			this.methodsUsedInTypeCheckingBranch = new LinkedHashSet<MethodDeclaration>();
+			this.fieldsToPushDown2 = new LinkedHashSet<VariableDeclarationFragment>();
+			this.methodsToPushDown2 = new LinkedHashSet<MethodDeclaration>();
 			this.allReferencedFields = findAllUsedFields();
+			findFieldsAndMethodsThatAreUsedInTypeCheckingBranch();
 			
+		}		
+		
+		public Set<VariableDeclarationFragment> getFieldsUsedInTypeCheckingBranch() {
+			return fieldsUsedInTypeCheckingBranch;
 		}
-				
+
+		public Set<MethodDeclaration> getMethodsUsedInTypeCheckingBranch() {
+			return methodsUsedInTypeCheckingBranch;
+		}
+
+		public Set<VariableDeclarationFragment> getFieldsToPushDown2() {
+			return fieldsToPushDown2;
+		}
+		
+		public void addFieldToPushDown(VariableDeclarationFragment field) {
+			fieldsToPushDown2.add(field);
+		}
+		
+		public Set<MethodDeclaration> getMethodsToPushDown2() {
+			return methodsToPushDown2;
+		}
+		
+		public void addMethodToPushDown(MethodDeclaration method) {
+			methodsToPushDown2.add(method);
+		}
+
 		public Set<VariableDeclarationFragment> getAllReferencedFields() {
 			return allReferencedFields;
 		}
@@ -183,18 +239,28 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			this.exclusiveFields = exclusiveFields;
 		}
 		
+		public Set<VariableDeclarationFragment> getFieldsToPushDown(){
+//			Set<VariableDeclarationFragment> fieldsToPushDown = new LinkedHashSet<VariableDeclarationFragment>();
+//			for (VariableDeclarationFragment vdf : exclusiveFields) {
+//				if (!fieldsUsedByPublicMethods.contains(vdf) ) {
+//					fieldsToPushDown.add(vdf);
+//				}
+//			}
+//			return fieldsToPushDown;
+			return fieldsToPushDown2;
+		}
+		
 		public Set<MethodDeclaration> getMethodsToPushDown() {
-			Set<MethodDeclaration> methods = new LinkedHashSet<MethodDeclaration>();
-			for (MethodDeclaration md : candidateMethodsToPushDown) {
-				Set<VariableDeclarationFragment> fieldsUsedByMethod = methodToFieldsUsed.get(md);
-				if (!areFieldsUsedByPublicMethods(fieldsUsedByMethod)) {
-					methods.add(md);
-				}
-				// TODO: add those method to become protected !!!!!!!!
-				
-			}
-			
-			return methods;
+//			Set<MethodDeclaration> methods = new LinkedHashSet<MethodDeclaration>();
+//			for (MethodDeclaration md : candidateMethodsToPushDown) {
+//				Set<VariableDeclarationFragment> fieldsUsedByMethod = methodToFieldsUsed.get(md);
+//				if (!areFieldsUsedByPublicMethods(fieldsUsedByMethod) && !privateMethodsInvokedByPublicMethods.contains(md)) {
+//					methods.add(md);
+//				}
+//				
+//			}			
+//			return methods;
+			return methodsToPushDown2;
 		}
 		
 		private boolean areFieldsUsedByPublicMethods(Set<VariableDeclarationFragment> fieldsUsedByMethod) {
@@ -205,14 +271,14 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			}
 			return false;
 		}
-
-		private Set<VariableDeclarationFragment> findAllUsedFields() {
+		
+		private void findFieldsAndMethodsThatAreUsedInTypeCheckingBranch() {
 			ClassObject classObject = typeCheckElimination.getClassObject();
 			Set<String> methodsToCheck = new LinkedHashSet<String> ();
 			for (MethodDeclaration md : typeCheckElimination.getMethodsUsedInsideStaticFieldBranch(staticField)) {
 				methodsToCheck.add(md.getName().getIdentifier());
+				methodsUsedInTypeCheckingBranch.add(md);
 			}
-			Queue<String> methodQueue = new LinkedList<String>(methodsToCheck); 
 			
 			Map<String, MethodObject> methodNameToObjectMap = new HashMap<String, MethodObject>();
 			for (MethodObject methodObject : classObject.getMethodList()) {
@@ -220,6 +286,38 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			}
 			
 			Set<String> fieldNames = new HashSet<String>();
+			Queue<String> methodQueue = new LinkedList<String>(methodsToCheck); 
+			while (!methodQueue.isEmpty()) {
+			    String methodName = methodQueue.poll();
+				MethodObject mo = methodNameToObjectMap.get(methodName);
+				for (PlainVariable pv : mo.getUsedFieldsThroughThisReference()) {
+					fieldNames.add(pv.getVariableName());
+				}
+				for (MethodInvocationObject invokedMethodObject:  mo.getInvokedMethodsThroughThisReference()) {
+					MethodDeclaration invokeMethodDecl = methodNameToObjectMap.get(invokedMethodObject.getMethodName()).getMethodDeclaration();
+					methodsUsedInTypeCheckingBranch.add(invokeMethodDecl);
+					methodQueue.add(invokedMethodObject.getMethodName());
+				}
+				
+			}
+			fieldsUsedInTypeCheckingBranch.addAll(typeCheckElimination.getFieldsUsedInTypeCheckingBranches(staticField));
+			fieldsUsedInTypeCheckingBranch.addAll(getVariableDeclarationFragmentsFromFieldNames(fieldNames, baseClassTypeDecleration));
+		}
+
+		private Set<VariableDeclarationFragment> findAllUsedFields() {
+			ClassObject classObject = typeCheckElimination.getClassObject();
+			Set<String> methodsToCheck = new LinkedHashSet<String> ();
+			for (MethodDeclaration md : typeCheckElimination.getMethodsUsedInsideStaticFieldBranch(staticField)) {
+				methodsToCheck.add(md.getName().getIdentifier());
+			}
+			
+			Map<String, MethodObject> methodNameToObjectMap = new HashMap<String, MethodObject>();
+			for (MethodObject methodObject : classObject.getMethodList()) {
+				methodNameToObjectMap.put(methodObject.getName(), methodObject);
+			}
+			
+			Set<String> fieldNames = new HashSet<String>();
+			Queue<String> methodQueue = new LinkedList<String>(methodsToCheck); 
 			while (!methodQueue.isEmpty()) {
 			    String methodName = methodQueue.poll();
 				MethodObject mo = methodNameToObjectMap.get(methodName);
@@ -256,7 +354,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	        return fragments;
 	    }
 				
-		private void addMethodToPushDown(MethodDeclaration md) {
+		private void addMethodToPushDownOLD(MethodDeclaration md) {
 			candidateMethodsToPushDown.add(md);
 		}
 		
@@ -275,7 +373,11 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 
 		    ListRewrite parametersRewrite = rewriter.getListRewrite(subclassConstructor, MethodDeclaration.PARAMETERS_PROPERTY);
 		    List<SingleVariableDeclaration> sbConstructorParams = new ArrayList<SingleVariableDeclaration>();
-		    for (VariableDeclarationFragment fragment : allReferencedFields) {
+		    
+		    Set<VariableDeclarationFragment> sbConstrParams = new LinkedHashSet<VariableDeclarationFragment>();
+		    sbConstrParams.addAll(fieldsToStayInBaseClass);
+		    sbConstrParams.addAll(getFieldsToPushDown());
+		    for (VariableDeclarationFragment fragment : sbConstrParams) {
 		        Type fieldType = ((FieldDeclaration) fragment.getParent()).getType();
 		        
 		        SingleVariableDeclaration parameter = ast.newSingleVariableDeclaration();
@@ -291,10 +393,27 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 
 		    SuperConstructorInvocation superConstructorInvocation = ast.newSuperConstructorInvocation();
 		    ListRewrite argumentRewrite = rewriter.getListRewrite(superConstructorInvocation, SuperConstructorInvocation.ARGUMENTS_PROPERTY);
-			for (VariableDeclarationFragment baseClassField : baseClassSharedFields) {
+			for (VariableDeclarationFragment baseClassField : fieldsToStayInBaseClass) {
 				SimpleName argumentName = ast.newSimpleName(baseClassField.getName().getIdentifier());
 				argumentRewrite.insertLast(argumentName, null);
 			}
+			
+			LinkedHashSet<String> paramsToKeep = new LinkedHashSet<String>();
+		    for (VariableDeclarationFragment param : getFieldsToPushDown()) {
+		    	paramsToKeep.add(param.getName().getIdentifier());
+		    }
+			for (String fieldName : paramsToKeep) {
+		        FieldAccess fieldAccess = ast.newFieldAccess();
+		        fieldAccess.setName(ast.newSimpleName(fieldName));
+		        fieldAccess.setExpression(ast.newThisExpression());
+		        
+		        Assignment assignment = ast.newAssignment();
+		        assignment.setLeftHandSide(fieldAccess);
+		        assignment.setRightHandSide(ast.newSimpleName(fieldName));
+		        
+		        ExpressionStatement expressionStatement = ast.newExpressionStatement(assignment);
+		        constructorBody.statements().add(expressionStatement); // Add the statement to the new block
+		    }
 
 		    ListRewrite statementsRewrite = rewriter.getListRewrite(constructorBody, Block.STATEMENTS_PROPERTY);
 		    statementsRewrite.insertFirst(superConstructorInvocation, null);
@@ -387,8 +506,9 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	// Replacing the modifiers of fields that are used in subclasses from private to protected
 	private void changeFieldModifiersToProtected(AST contextAST, ASTRewrite sourceRewriter) {
 		TypeDeclaration typeDecl = this.baseClassTypeDecleration;
-		Set<VariableDeclarationFragment> fieldsToChange = baseClassSharedFields;
-
+//		Set<VariableDeclarationFragment> fieldsToChange = fieldsToStayInBaseClass;
+		Set<VariableDeclarationFragment> fieldsToChange = fieldsToConvertToProtected;
+		
 		for (FieldDeclaration fieldDecl : typeDecl.getFields()) {
 	        for (Object obj : fieldDecl.fragments()) {
 	            VariableDeclarationFragment fragment = (VariableDeclarationFragment) obj;
@@ -412,26 +532,22 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	    
 	}
 	
-	// Replacing the modifiers of methods that are used in subclasses from private to protected
+	// Replacing the modifiers of methods that are used in subclasses and cant be pushed down from private to protected
 	private void changeMethodModifiersToProtected(AST contextAST, ASTRewrite sourceRewriter) {
-	    TypeDeclaration typeDecl = this.baseClassTypeDecleration;
-	    Set<MethodDeclaration> methodsToChange = methodsUsedInSubclasses;
 	    
-	    for (MethodDeclaration methodDecl : typeDecl.getMethods()) {
-	        if (methodsToChange.contains(methodDecl)) {
-	            List modifiers = methodDecl.modifiers();
-	            Modifier privateModifier = null;
-	            for (Object mod : modifiers) {
-	                if (mod instanceof Modifier && ((Modifier) mod).isPrivate()) {
-	                    privateModifier = (Modifier) mod;
-	                    break;
-	                }
-	            }
+	    for (MethodDeclaration methodDecl : methodsToConvertToProtected) {
+	    	List modifiers = methodDecl.modifiers();
+            Modifier privateModifier = null;
+            for (Object mod : modifiers) {
+                if (mod instanceof Modifier && ((Modifier) mod).isPrivate()) {
+                    privateModifier = (Modifier) mod;
+                    break;
+                }
+            }
 
-	            if (privateModifier != null) {
-	                sourceRewriter.set(privateModifier, Modifier.KEYWORD_PROPERTY,  Modifier.ModifierKeyword.PROTECTED_KEYWORD, null);
-	            }
-	        }
+            if (privateModifier != null) {
+                sourceRewriter.set(privateModifier, Modifier.KEYWORD_PROPERTY,  Modifier.ModifierKeyword.PROTECTED_KEYWORD, null);
+            }
 	    }
 	}
 	
@@ -448,7 +564,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	private void removeFieldsThatWillBePushedDown(ASTRewrite sourceRewriter) {
 		Set<FieldDeclaration> fields = new LinkedHashSet<FieldDeclaration>();
 		for (Subclass sb : nameToSubclassMap.values()) {
-			for (VariableDeclarationFragment vfr : sb.getExclusiveFields()) {
+			for (VariableDeclarationFragment vfr : sb.getFieldsToPushDown()) {
 				ASTNode parentNode = vfr.getParent();
 
 				if (parentNode instanceof FieldDeclaration) {
@@ -463,13 +579,12 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	}
 	
 	private void modifyBaseClassConstructorToSetOnlySharedFields(AST ast, ASTRewrite rewriter) {
-	    Set<VariableDeclarationFragment> sharedFields = baseClassSharedFields;
+	    Set<VariableDeclarationFragment> sharedFields = fieldsToStayInBaseClass;
 	    MethodDeclaration constructor = typeCheckElimination.getTypeFieldConsturctorMethod();
 	    LinkedHashSet<String> paramsToKeep = new LinkedHashSet<String>();
 	    for (VariableDeclarationFragment param : sharedFields) {
 	    	paramsToKeep.add(param.getName().getIdentifier());
 	    }
-	    
 	    // remove all the parameters by name
 	    ListRewrite parametersRewrite = rewriter.getListRewrite(constructor, MethodDeclaration.PARAMETERS_PROPERTY);
 	    @SuppressWarnings("unchecked")
@@ -493,7 +608,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	        assignment.setRightHandSide(ast.newSimpleName(fieldName));
 	        
 	        ExpressionStatement expressionStatement = ast.newExpressionStatement(assignment);
-	        newBlock.statements().add(expressionStatement); // Add the statement to the new block
+	        newBlock.statements().add(expressionStatement); 
 	    }
 	    rewriter.replace(constructor.getBody(), newBlock, null);
 	}
@@ -554,7 +669,13 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
             
             Subclass sb = nameToSubclassMap.get(className);
 		    ListRewrite argumentRewrite = rewriter.getListRewrite(creation, ClassInstanceCreation.ARGUMENTS_PROPERTY);
-			for (VariableDeclarationFragment baseClassField : sb.getAllReferencedFields()) {
+		    	    
+			for (VariableDeclarationFragment baseClassField : fieldsToStayInBaseClass) {
+				SimpleName argumentName = ast.newSimpleName(baseClassField.getName().getIdentifier());
+				argumentRewrite.insertLast(argumentName, null);
+			}
+			
+			for (VariableDeclarationFragment baseClassField : sb.getFieldsToPushDown()) {
 				SimpleName argumentName = ast.newSimpleName(baseClassField.getName().getIdentifier());
 				argumentRewrite.insertLast(argumentName, null);
 			}
@@ -615,6 +736,51 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	                    }
 	                }
 	            }
+	        }
+	    }
+	    return null;
+	}
+	
+	// Use it to bind the parameter names with the correct field for the original constructor
+	// We have to use it to for the subclasses probably
+	private Map<String, String> findParameterToFieldMap() {
+	    MethodDeclaration constructor = typeCheckElimination.getTypeFieldConsturctorMethod();
+	    Map<String, String> parameterToFieldMap = new HashMap<String, String>();
+
+	    for (Object paramObj : constructor.parameters()) {
+	        SingleVariableDeclaration param = (SingleVariableDeclaration) paramObj;
+	        String paramName = param.getName().getIdentifier();
+	        
+	        Block body = constructor.getBody();
+	        for (Object stObj : body.statements()) {
+	            Statement statement = (Statement) stObj;
+	            if (statement instanceof ExpressionStatement) {
+	                Expression expression = ((ExpressionStatement) statement).getExpression();
+
+	                if (expression instanceof Assignment) {
+	                    Assignment assignment = (Assignment) expression;
+	                    String fieldName = getFieldNameFromAssignment(assignment, paramName);
+	                    if (fieldName != null) {
+	                        parameterToFieldMap.put(paramName, fieldName);
+	                    }
+	                }
+	            }
+	        }
+	    }
+	    return parameterToFieldMap;
+	}
+
+	private String getFieldNameFromAssignment(Assignment assignment, String paramName) {
+	    Expression leftHandSide = assignment.getLeftHandSide();
+	    Expression rightHandSide = assignment.getRightHandSide();
+
+	    boolean matchesParamName = rightHandSide instanceof SimpleName && 
+	                               ((SimpleName) rightHandSide).getIdentifier().equals(paramName);
+	    if (matchesParamName) {
+	        if (leftHandSide instanceof FieldAccess) {
+	            return ((FieldAccess) leftHandSide).getName().getIdentifier();
+	        } else if (leftHandSide instanceof SimpleName) {
+	            return ((SimpleName) leftHandSide).getIdentifier();
 	        }
 	    }
 	    return null;
@@ -741,7 +907,6 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			
 			Set<VariableDeclarationFragment> pushedDownFields =  pushDownSubclassSpecificFields(subclassNames.get(i), subclassRewriter, subclassAST, subclassTypeDeclaration);
 			sb.createSubclassConstructor(sb, subclassAST, subclassRewriter, subclassBodyRewrite, subclassCompilationUnit);
-//			createSubclassConstructor(sb, subclassAST, subclassRewriter, subclassBodyRewrite, subclassCompilationUnit);
 			pushDownMethods(subclassNames.get(i), subclassAST, subclassRewriter, subclassBodyRewrite, subclassCompilationUnit);
 /*
 			
@@ -1048,57 +1213,6 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 		}
 	}
 	
-//	private void createSubclassConstructor(Subclass sb, AST ast, ASTRewrite rewriter, ListRewrite subclassBodyRewrite, CompilationUnit subclassCompilationUnit) {
-//		String constructorName = sb.name;
-//	    MethodDeclaration baseClassConstructor = typeCheckElimination.getTypeFieldConsturctorMethod();
-//	    List<SingleVariableDeclaration> baseClassConstructorParams = baseClassConstructor.parameters();
-//	    
-//	    MethodDeclaration subclassConstructor = ast.newMethodDeclaration();
-//	    // Set the constructor flag, name, and modifiers
-//	    rewriter.set(subclassConstructor, MethodDeclaration.CONSTRUCTOR_PROPERTY, true, null);
-//	    rewriter.set(subclassConstructor, MethodDeclaration.NAME_PROPERTY, ast.newSimpleName(constructorName), null);
-//	    ListRewrite modifiersRewrite = rewriter.getListRewrite(subclassConstructor, MethodDeclaration.MODIFIERS2_PROPERTY);
-//	    modifiersRewrite.insertLast(ast.newModifier(ModifierKeyword.PUBLIC_KEYWORD), null);
-//
-//	    ListRewrite parametersRewrite = rewriter.getListRewrite(subclassConstructor, MethodDeclaration.PARAMETERS_PROPERTY);
-//	    for (SingleVariableDeclaration originalParam : baseClassConstructorParams) {
-//	        SingleVariableDeclaration newParam = (SingleVariableDeclaration) ASTNode.copySubtree(ast, originalParam);
-//	        parametersRewrite.insertLast(newParam, null);
-//	    }
-//	    
-//	    for (VariableDeclarationFragment fragment : ) {
-//	        Type fieldType = ((FieldDeclaration) fragment.getParent()).getType();
-//	        
-//	        SingleVariableDeclaration parameter = ast.newSingleVariableDeclaration();
-//	        parameter.setType((Type) ASTNode.copySubtree(ast, fieldType)); 
-//	        parameter.setName(ast.newSimpleName(fragment.getName().getIdentifier()));
-//
-//	        parametersRewrite.insertLast(parameter, null);
-//	    }
-//
-//	    Block constructorBody = ast.newBlock();
-//
-//	    SuperConstructorInvocation superConstructorInvocation = ast.newSuperConstructorInvocation();
-//	    ListRewrite argumentRewrite = rewriter.getListRewrite(superConstructorInvocation, SuperConstructorInvocation.ARGUMENTS_PROPERTY);
-//	    for (SingleVariableDeclaration param : baseClassConstructorParams) {
-//	        SimpleName argumentName = (SimpleName) ASTNode.copySubtree(ast, param.getName());
-//	        argumentRewrite.insertLast(argumentName, null);
-//	    }
-//
-//	    ListRewrite statementsRewrite = rewriter.getListRewrite(constructorBody, Block.STATEMENTS_PROPERTY);
-//	    statementsRewrite.insertFirst(superConstructorInvocation, null);
-//
-//	    rewriter.set(subclassConstructor, MethodDeclaration.BODY_PROPERTY, constructorBody, null);
-//
-//	    subclassBodyRewrite.insertLast(subclassConstructor, null);
-//	    
-//	    Set<ITypeBinding> requiredImportDeclarationsBasedOnBranch = getRequiredImportDeclarationsParameters((List<SingleVariableDeclaration>) baseClassConstructorParams);
-//		for(ITypeBinding typeBinding : requiredImportDeclarationsBasedOnBranch) {
-//			if(!requiredImportDeclarationsBasedOnSignature.contains(typeBinding))
-//				addImportDeclaration(typeBinding, subclassCompilationUnit, rewriter);
-//		}
-//	}
-	
 	private Set<ITypeBinding> getRequiredImportDeclarationsParameters(List<SingleVariableDeclaration> nodes) {
 		Set<ITypeBinding> typeBindings = new LinkedHashSet<ITypeBinding>();
 		for(ASTNode node : nodes) {
@@ -1123,7 +1237,7 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	
 	private Set<VariableDeclarationFragment> pushDownSubclassSpecificFields(String subclassName, ASTRewrite rewriter, AST ast, TypeDeclaration typeDecleartion) {
 		Subclass sc = nameToSubclassMap.get(subclassName);
-		Set<VariableDeclarationFragment> subclassSpecificFields = sc.getExclusiveFields();
+		Set<VariableDeclarationFragment> subclassSpecificFields = sc.getFieldsToPushDown();
 		
 		for (VariableDeclarationFragment fragment : subclassSpecificFields) {
 	        FieldDeclaration field = (FieldDeclaration) fragment.getParent();
@@ -1137,7 +1251,10 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 	
 	private void setFieldsUsedInBaseClassMethods() {
 		ClassObject classObject = typeCheckElimination.getClassObject();
+		Set<String> methodsInvokedInPublicMethods = new LinkedHashSet<String>();
+		Map<String, MethodDeclaration> nameToMethodDecl = new HashMap<String, MethodDeclaration>();
 		for (MethodObject methodObject : classObject.getMethodList()) {
+			nameToMethodDecl.put(methodObject.getName(), methodObject.getMethodDeclaration());
 			if (methodObject.getMethodDeclaration() == typeCheckElimination.getTypeCheckMethod()) {
 				continue;
 			}
@@ -1149,9 +1266,46 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			methodToFieldsUsed.put(methodObject.getMethodDeclaration(), fieldsAsVdf);
 			if (MethodDeclarationUtility.isPublic(methodObject.getMethodDeclaration())) {
 				fieldsUsedByPublicMethods.addAll(fieldsAsVdf);
+				for (MethodInvocationObject mio : methodObject.getInvokedMethodsThroughThisReference()) {
+					methodsInvokedInPublicMethods.add(mio.getMethodName());
+				}
+				
+			}	
+		}
+		
+		for (String methodName : methodsInvokedInPublicMethods) {
+			MethodDeclaration methodDecl = nameToMethodDecl.get(methodName);
+			if (MethodDeclarationUtility.isPrivate(methodDecl)) {
+				privateMethodsInvokedByPublicMethods.add(methodDecl);
+//				fieldsUsedByPublicMethods.addAll(methodToFieldsUsed.get(methodDecl));
 			}
 		}
 		
+	}
+	
+	private void setPrivateMethodsInvokedByPublicMethods() {
+		ClassObject classObject = typeCheckElimination.getClassObject();
+		Set<String> methodsInvokedInPublicMethods = new LinkedHashSet<String>();
+		Map<String, MethodDeclaration> nameToMethodDecl = new HashMap<String, MethodDeclaration>();
+		for (MethodObject methodObject : classObject.getMethodList()) {
+			if (methodObject.getMethodDeclaration() == typeCheckElimination.getTypeCheckMethod()) {
+				continue;
+			}
+			nameToMethodDecl.put(methodObject.getName(), methodObject.getMethodDeclaration());
+			if (MethodDeclarationUtility.isPublic(methodObject.getMethodDeclaration())) {
+				for (MethodInvocationObject mio : methodObject.getInvokedMethodsThroughThisReference()) {
+					methodsInvokedInPublicMethods.add(mio.getMethodName());
+				}
+				methodObject.getInvokedStaticMethods();
+			}
+		}
+		
+		for (String methodName : methodsInvokedInPublicMethods) {
+			MethodDeclaration methodDecl = nameToMethodDecl.get(methodName);
+			if (MethodDeclarationUtility.isPrivate(methodDecl)) {
+				privateMethodsInvokedByPublicMethods.add(methodDecl);
+			}
+		}
 	}
 	
 	private Set<VariableDeclarationFragment> getVariableDeclarationFragmentsFromFieldNames(Set<String> fieldNames, TypeDeclaration baseClassTypeDeclaration) {
@@ -1201,17 +1355,100 @@ public class ReplaceTypeCodeWithSubclass extends PolymorphismRefactoring {
 			}
 			for (Subclass sb : nameToSubclassMap.values()) {
 				if (sb.getAllReferencedFields().containsAll(fieldsUsedInMethod)) {
-					if (sb.getExclusiveFields().containsAll(fieldsUsedInMethod)) {
-						sb.addMethodToPushDown(md);
-					} else {
+					if (sb.getFieldsToPushDown().containsAll(fieldsUsedInMethod)) {
+						sb.addMethodToPushDownOLD(md);
+					} else  {
+						
 						methodsUsedInSubclasses.add(md);
 					}
 				}
 			}
 		}
 	}
+	
+	private void setFieldsToStayInBaseClass() {
+	    fieldsToStayInBaseClass.addAll(baseClassSharedFields);
+	    fieldsToStayInBaseClass.addAll(fieldsUsedByPublicMethods);
+	}
+	
+	private void processFields() {
+		Set<VariableDeclarationFragment> fieldsUsedBySubclasses = new LinkedHashSet<VariableDeclarationFragment>();
+		Set<VariableDeclarationFragment> sharedFields = null;
+		for (Subclass sb : nameToSubclassMap.values()) {
+			fieldsUsedBySubclasses.addAll(sb.getFieldsUsedInTypeCheckingBranch());
+			if (sharedFields == null) {
+				sharedFields = new LinkedHashSet<VariableDeclarationFragment>(sb.getFieldsUsedInTypeCheckingBranch());
+			} else {
+				sharedFields.retainAll(sb.getFieldsUsedInTypeCheckingBranch());
+			}
+		}
+		
+		for (VariableDeclarationFragment field : fieldsUsedBySubclasses) {
+			if (isVariableDeclarationFragmentPublic(field)) {
+				continue;
+			}
+			if (fieldsUsedByPublicMethods.contains(field)) {
+				fieldsToConvertToProtected.add(field);
+			}
+		}
+		fieldsToConvertToProtected.addAll(sharedFields);
+		
 
+		for (Subclass sb : nameToSubclassMap.values()) {
+			for (VariableDeclarationFragment field : sb.getFieldsUsedInTypeCheckingBranch()) {
+				if (!fieldsToConvertToProtected.contains(field)) {
+					sb.addFieldToPushDown(field);
+				}
+			}
+		}
+		
+	}
+	
+	private void processMethods() {
+		Set<MethodDeclaration> methodsUsedBySubclasses = new LinkedHashSet<MethodDeclaration>();
+		Set<MethodDeclaration> sharedMethods= null;
+		for (Subclass sb : nameToSubclassMap.values()) {
+			Set<MethodDeclaration> methods = sb.getMethodsUsedInTypeCheckingBranch();
+			methodsUsedBySubclasses.addAll(methods);
+			if (sharedMethods == null) {
+				sharedMethods = new LinkedHashSet<MethodDeclaration>(methods);
+			} else {
+				sharedMethods.retainAll(methods);
+			}
+		}
+		
+		for (MethodDeclaration method : methodsUsedBySubclasses) {
+			if (MethodDeclarationUtility.isPublic(method)) {
+				continue;
+			}
+			if (privateMethodsInvokedByPublicMethods.contains(method)) {
+				methodsToConvertToProtected.add(method);
+			}
+		}
+		methodsToConvertToProtected.addAll(sharedMethods);
+		
 
+		for (Subclass sb : nameToSubclassMap.values()) {
+			for (MethodDeclaration method : sb.getMethodsUsedInTypeCheckingBranch()) {
+				if (!methodsToConvertToProtected.contains(method)) {
+					sb.addMethodToPushDown(method);
+				}
+			}
+		}
+	}
+	
+	
+	private boolean isVariableDeclarationFragmentPublic(VariableDeclarationFragment vdf) {
+		  if (vdf.getParent() instanceof FieldDeclaration) {
+	            FieldDeclaration field = (FieldDeclaration) vdf.getParent();
+	            int modifiers = field.getModifiers();
+	            if (Modifier.isPublic(modifiers)) {
+	                return true;
+	            }
+		  }
+		  return false;
+	}
+	
 	@Override
 	public Change createChange(IProgressMonitor pm) throws CoreException,
 			OperationCanceledException {
